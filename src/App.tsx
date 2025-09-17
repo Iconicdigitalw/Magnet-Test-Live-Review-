@@ -29,7 +29,10 @@ function TempoRoutes() {
     }
   }, []);
 
-  return routes ? useRoutes(routes) : null;
+  // Always call useRoutes to maintain consistent hook order
+  // Pass empty array as fallback when routes is null
+  const routeElement = useRoutes(routes || []);
+  return routeElement;
 }
 
 export default App;
