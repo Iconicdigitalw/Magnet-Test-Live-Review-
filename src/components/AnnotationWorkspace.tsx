@@ -1,5 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
-import { fabric } from "fabric";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   Laptop,
   Smartphone,
@@ -21,6 +20,21 @@ import {
   Play,
   Pause,
   StopCircle,
+  Zap,
+  X,
+  ZoomIn,
+  ZoomOut,
+  Home,
+  FolderOpen,
+  BarChart3,
+  MousePointer,
+  Pencil,
+  Highlighter,
+  Eraser,
+  Undo,
+  Redo,
+  Trash2,
+  Palette,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -45,6 +59,7 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import LiveAnnotationOverlay from "./LiveAnnotationOverlay";
+import MagnetReviewPanel from "./MagnetReviewPanel";
 import { toast } from "@/components/ui/use-toast";
 
 interface AnnotationWorkspaceProps {
@@ -52,6 +67,10 @@ interface AnnotationWorkspaceProps {
   projectId?: string;
   reviewId?: string;
   currentTab?: string;
+  onTabChange?: (tabId: string) => void;
+  onNavigateHome?: () => void;
+  onNavigateProjects?: () => void;
+  onNavigateReports?: () => void;
 }
 
 const deviceSizes = [
@@ -65,15 +84,15 @@ const deviceSizes = [
   {
     id: "desktop",
     name: "Desktop",
-    width: 1440,
-    height: 900,
+    width: 1366,
+    height: 768,
     icon: <Monitor className="h-4 w-4" />,
   },
   {
     id: "laptop",
     name: "Laptop",
-    width: 1024,
-    height: 768,
+    width: 1280,
+    height: 800,
     icon: <Laptop className="h-4 w-4" />,
   },
   {
@@ -87,9 +106,23 @@ const deviceSizes = [
     id: "mobile",
     name: "Mobile",
     width: 375,
-    height: 667,
+    height: 812,
     icon: <Smartphone className="h-4 w-4" />,
   },
+];
+
+const zoomLevels = [0.25, 0.5, 0.75, 1.0];
+
+// Predefined colors for annotation tools
+const ANNOTATION_COLORS = [
+  { name: "Red", value: "#ef4444" },
+  { name: "Orange", value: "#f97316" },
+  { name: "Yellow", value: "#eab308" },
+  { name: "Green", value: "#22c55e" },
+  { name: "Blue", value: "#3b82f6" },
+  { name: "Purple", value: "#a855f7" },
+  { name: "Pink", value: "#ec4899" },
+  { name: "Black", value: "#000000" },
 ];
 
 const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
@@ -97,6 +130,10 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
   projectId = "project-1",
   reviewId = "review-1",
   currentTab = "M",
+  onTabChange = () => {},
+  onNavigateHome = () => {},
+  onNavigateProjects = () => {},
+  onNavigateReports = () => {},
 }) => {
   const [currentUrl, setCurrentUrl] = useState<string>(url);
   const [inputUrl, setInputUrl] = useState<string>(url);
@@ -110,10 +147,17 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
   const [activeAnnotationTool, setActiveAnnotationTool] =
     useState<string>("pen");
   const [isRecording, setIsRecording] = useState<boolean>(false);
-  const [annotationTool, setAnnotationTool] = useState<string>("pen");
+  const [annotationTool, setAnnotationTool] = useState<string>("#22c55e");
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(
     null,
   );
+  const [isMagnetPanelOpen, setIsMagnetPanelOpen] = useState<boolean>(false);
+  const [magnetActiveTab, setMagnetActiveTab] = useState<string>(currentTab);
+  const [zoomLevel, setZoomLevel] = useState<number>(0.75);
+  const [isAnnotationMode, setIsAnnotationMode] = useState<boolean>(true);
+  const [annotations, setAnnotations] = useState<any>(null);
+  const [isAnnotationToolboxOpen, setIsAnnotationToolboxOpen] =
+    useState<boolean>(true);
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -121,6 +165,10 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
   const currentDevice =
     deviceSizes.find((device) => device.id === selectedDevice) ||
     deviceSizes[1];
+
+  // Calculate scaled dimensions
+  const scaledWidth = Math.round(currentDevice.width * zoomLevel);
+  const scaledHeight = Math.round(currentDevice.height * zoomLevel);
 
   // Handle URL navigation
   const navigateToUrl = () => {
@@ -161,7 +209,13 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
   const handleRefresh = () => {
     setIsLoading(true);
     if (iframeRef.current) {
-      iframeRef.current.src = currentUrl;
+      // Force a complete reload by setting src to empty first
+      iframeRef.current.src = "about:blank";
+      setTimeout(() => {
+        if (iframeRef.current) {
+          iframeRef.current.src = currentUrl;
+        }
+      }, 100);
     }
   };
 
@@ -169,16 +223,102 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
     setIsFullscreen(!isFullscreen);
   };
 
+  const toggleMagnetPanel = () => {
+    setIsMagnetPanelOpen(!isMagnetPanelOpen);
+  };
+
+  const handleMagnetTabChange = (tabId: string) => {
+    setMagnetActiveTab(tabId);
+    onTabChange(tabId);
+  };
+
+  // Zoom handlers
+  const handleZoomIn = () => {
+    const currentIndex = zoomLevels.indexOf(zoomLevel);
+    if (currentIndex < zoomLevels.length - 1) {
+      setZoomLevel(zoomLevels[currentIndex + 1]);
+    }
+  };
+
+  const handleZoomOut = () => {
+    const currentIndex = zoomLevels.indexOf(zoomLevel);
+    if (currentIndex > 0) {
+      setZoomLevel(zoomLevels[currentIndex - 1]);
+    }
+  };
+
+  const handleZoomReset = () => {
+    setZoomLevel(1.0);
+  };
+
   // Annotation tool handlers
   const handleAnnotationTool = (tool: string) => {
     setActiveAnnotationTool(tool);
     setAnnotationTool(tool);
+    setIsAnnotationMode(true);
+
+    // Provide user feedback about tool behavior
+    const toolMessages = {
+      select: "Select mode - you can interact with the website normally",
+      pen: "Pen tool - click and drag to draw on the website",
+      highlighter: "Highlighter tool - click and drag to highlight areas",
+      text: "Text tool - click anywhere to add text annotations",
+      arrow: "Arrow tool - click and drag to draw arrows",
+      rectangle: "Rectangle tool - click and drag to draw rectangles",
+      eraser: "Eraser tool - click on annotations to remove them",
+    };
+
     toast({
       title: `${tool.charAt(0).toUpperCase() + tool.slice(1)} tool selected`,
-      description: `You can now use the ${tool} tool to annotate the website.`,
-      duration: 2000,
+      description:
+        toolMessages[tool as keyof typeof toolMessages] ||
+        `You can now use the ${tool} tool to annotate the website.`,
+      duration: 3000,
     });
   };
+
+  // Toggle annotation mode
+  const toggleAnnotationMode = () => {
+    setIsAnnotationMode(!isAnnotationMode);
+    if (!isAnnotationMode) {
+      setIsAnnotationToolboxOpen(true);
+      toast({
+        title: "Annotation mode enabled",
+        description:
+          "You can now annotate the website. Use the tools panel on the left.",
+        duration: 3000,
+      });
+    }
+  };
+
+  const toggleAnnotationToolbox = () => {
+    setIsAnnotationToolboxOpen(!isAnnotationToolboxOpen);
+  };
+
+  // Handle annotation changes
+  const handleAnnotationChange = (newAnnotations: any) => {
+    setAnnotations(newAnnotations);
+    // Auto-save annotations to localStorage
+    try {
+      const storageKey = `annotations-${projectId}-${reviewId}-${magnetActiveTab}`;
+      localStorage.setItem(storageKey, JSON.stringify(newAnnotations));
+    } catch (error) {
+      console.error("Failed to save annotations:", error);
+    }
+  };
+
+  // Load saved annotations
+  useEffect(() => {
+    try {
+      const storageKey = `annotations-${projectId}-${reviewId}-${magnetActiveTab}`;
+      const savedAnnotations = localStorage.getItem(storageKey);
+      if (savedAnnotations) {
+        setAnnotations(JSON.parse(savedAnnotations));
+      }
+    } catch (error) {
+      console.error("Failed to load annotations:", error);
+    }
+  }, [projectId, reviewId, magnetActiveTab]);
 
   // Screen capture handler
   const handleScreenCapture = async () => {
@@ -347,6 +487,11 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
         const iframeUrl = iframeRef.current.contentWindow.location.href;
         setInputUrl(iframeUrl);
         setCurrentUrl(iframeUrl);
+
+        // Prevent infinite reloads by checking if the URL has changed unexpectedly
+        if (iframeUrl !== currentUrl && !iframeUrl.includes("about:blank")) {
+          console.log("URL changed to:", iframeUrl);
+        }
       }
     } catch (error) {
       // Cross-origin restrictions might prevent accessing the URL
@@ -354,41 +499,113 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
         "Could not access iframe URL due to cross-origin restrictions",
       );
     }
+
+    // Add error handling for problematic websites
+    try {
+      if (iframeRef.current && iframeRef.current.contentWindow) {
+        // Prevent the iframe from navigating the parent window
+        iframeRef.current.contentWindow.addEventListener(
+          "beforeunload",
+          (e) => {
+            e.preventDefault();
+            return false;
+          },
+        );
+
+        // Prevent popup behavior that might cause reloading
+        iframeRef.current.contentWindow.addEventListener("error", (e) => {
+          console.log("Iframe content error prevented:", e);
+          e.preventDefault();
+        });
+      }
+    } catch (error) {
+      console.log(
+        "Could not add iframe event listeners due to cross-origin restrictions",
+      );
+    }
   };
 
-  // Handle iframe scroll events
+  // Enhanced iframe scroll events with polling fallback for cross-origin sites
   useEffect(() => {
     let scrollListener: (() => void) | null = null;
+    let scrollPollInterval: NodeJS.Timeout | null = null;
+    let lastScrollX = 0;
+    let lastScrollY = 0;
+    let isIframeReady = false;
+    let rafId: number | null = null;
+    const scheduleUpdate = (x: number, y: number) => {
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        setScrollPosition({ x, y });
+      });
+    };
 
     const handleIframeScroll = () => {
       try {
-        if (iframeRef.current && iframeRef.current.contentWindow) {
+        if (
+          iframeRef.current &&
+          iframeRef.current.contentWindow &&
+          isIframeReady
+        ) {
           const { scrollX, scrollY } = iframeRef.current.contentWindow;
-          setScrollPosition({ x: scrollX, y: scrollY });
+          if (scrollX !== lastScrollX || scrollY !== lastScrollY) {
+            lastScrollX = scrollX;
+            lastScrollY = scrollY;
+            scheduleUpdate(scrollX, scrollY);
+          }
         }
       } catch (error) {
         // Cross-origin restrictions might prevent accessing scroll position
+        // Use polling as fallback
       }
     };
 
-    // Try to add scroll event listener to iframe
-    try {
-      if (iframeRef.current && iframeRef.current.contentWindow) {
-        iframeRef.current.contentWindow.addEventListener(
-          "scroll",
-          handleIframeScroll,
+    // Wait for iframe to be ready before setting up scroll tracking
+    const setupScrollTracking = () => {
+      try {
+        if (iframeRef.current && iframeRef.current.contentWindow) {
+          // Test if we can access the content window
+          const testAccess = iframeRef.current.contentWindow.location;
+
+          // If we get here, we have access - set up direct event listener
+          iframeRef.current.contentWindow.addEventListener(
+            "scroll",
+            handleIframeScroll,
+            { passive: true },
+          );
+          scrollListener = handleIframeScroll;
+          isIframeReady = true;
+
+          // Initial scroll position check
+          handleIframeScroll();
+        }
+      } catch (error) {
+        // Cross-origin restrictions - use polling fallback
+        console.log(
+          "Using polling fallback for scroll tracking due to cross-origin restrictions",
         );
-        scrollListener = handleIframeScroll;
+        isIframeReady = true;
+        scrollPollInterval = setInterval(handleIframeScroll, 50); // More frequent polling
       }
-    } catch (error) {
-      // Cross-origin restrictions might prevent adding event listener
-      console.log(
-        "Could not add scroll listener due to cross-origin restrictions",
-      );
-    }
+    };
+
+    // Set up scroll tracking after a short delay to ensure iframe is loaded
+    const timeoutId = setTimeout(setupScrollTracking, 500);
+
+    // Handle iframe resize events to reposition annotations
+    const handleResize = () => {
+      if (iframeRef.current && isIframeReady) {
+        // Force a scroll position update on resize
+        handleIframeScroll();
+      }
+    };
+
+    window.addEventListener("resize", handleResize);
 
     // Cleanup function
     return () => {
+      clearTimeout(timeoutId);
+
       if (scrollListener) {
         try {
           if (iframeRef.current && iframeRef.current.contentWindow) {
@@ -398,29 +615,91 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
             );
           }
         } catch (error) {
-          // Cross-origin restrictions might prevent removing event listener
           console.log(
             "Could not remove scroll listener due to cross-origin restrictions",
           );
         }
       }
+
+      if (scrollPollInterval) {
+        clearInterval(scrollPollInterval);
+      }
+
+      window.removeEventListener("resize", handleResize);
+      if (rafId) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
     };
-  }, [currentUrl]);
+  }, [currentUrl, isLoading]);
+
+  // Get color for MAGNET tab
+  const getTabColor = (tabId: string) => {
+    const colors: Record<string, string> = {
+      M: "#ef4444", // Red
+      A: "#3b82f6", // Blue
+      G: "#eab308", // Yellow
+      N: "#22c55e", // Green
+      E: "#a855f7", // Purple
+      T: "#f97316", // Orange
+    };
+    return colors[tabId] || "#22c55e";
+  };
 
   return (
     <div
       className="flex flex-col w-full h-full bg-background"
       ref={containerRef}
     >
-      {/* Compact Browser navigation bar */}
-      <div className="flex items-center gap-1 p-2 border-b bg-background">
+      {/* Consolidated Navigation Bar */}
+      <div className="flex items-center gap-2 p-2 border-b bg-background">
+        {/* App Navigation */}
+        <div className="flex items-center gap-1">
+          <h1 className="text-lg font-bold mr-3">MAGNET Review</h1>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="sm" onClick={onNavigateHome}>
+                  <Home className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Dashboard</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="sm" onClick={onNavigateProjects}>
+                  <FolderOpen className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Projects</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="sm" onClick={onNavigateReports}>
+                  <BarChart3 className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Reports</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
+          <div className="w-px h-6 bg-border mx-2" />
+        </div>
+
+        {/* Browser Controls */}
         {/* Left side - Browser controls */}
         <div className="flex items-center gap-1">
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button variant="ghost" size="sm" onClick={handleGoBack}>
-                  <ArrowLeft className="h-3 w-3" />
+                  <ArrowLeft className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Go back</TooltipContent>
@@ -431,7 +710,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button variant="ghost" size="sm" onClick={handleGoForward}>
-                  <ArrowRight className="h-3 w-3" />
+                  <ArrowRight className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Go forward</TooltipContent>
@@ -442,7 +721,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button variant="ghost" size="sm" onClick={handleRefresh}>
-                  <RefreshCw className="h-3 w-3" />
+                  <RefreshCw className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Refresh</TooltipContent>
@@ -469,41 +748,122 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
           </Button>
         </div>
 
-        {/* Center - New functionality tools */}
+        {/* Zoom Controls */}
         <div className="flex items-center gap-1">
-          {/* Live Annotator */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild className="size-12">
-              <Button variant="ghost" size="sm" className="h-8 w-8">
-                <Pen className="h-4 w-4 flex" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="center">
-              <DropdownMenuItem onClick={() => handleAnnotationTool("pen")}>
-                <Pen className="h-4 w-4 mr-2" />
-                Pen Tool
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => handleAnnotationTool("highlighter")}
-              >
-                <Square className="h-4 w-4 mr-2" />
-                Highlighter
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleAnnotationTool("text")}>
-                <Type className="h-4 w-4 mr-2" />
-                Text Note
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleAnnotationTool("arrow")}>
-                <ArrowUpRight className="h-4 w-4 mr-2" />
-                Arrow
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleZoomOut}
+                  disabled={zoomLevel === zoomLevels[0]}
+                >
+                  <ZoomOut className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Zoom Out</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
+          <span className="text-xs font-medium min-w-[3rem] text-center">
+            {Math.round(zoomLevel * 100)}%
+          </span>
+
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleZoomIn}
+                  disabled={zoomLevel === zoomLevels[zoomLevels.length - 1]}
+                >
+                  <ZoomIn className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Zoom In</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
+          <div className="w-px h-6 bg-border mx-1" />
+        </div>
+
+        {/* Annotation & Review Tools */}
+        <div className="flex items-center">
+          {/* MAGNET Review Panel Toggle */}
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={isMagnetPanelOpen ? "default" : "ghost"}
+                  size="sm"
+                  onClick={toggleMagnetPanel}
+                >
+                  <Zap className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {isMagnetPanelOpen
+                  ? "Close MAGNET Review"
+                  : "Open MAGNET Review"}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
+          {/* Annotation Mode Toggle */}
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={isAnnotationMode ? "default" : "ghost"}
+                  size="sm"
+                  onClick={toggleAnnotationMode}
+                  className={
+                    isAnnotationMode ? "bg-primary text-primary-foreground" : ""
+                  }
+                >
+                  <Pen className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {isAnnotationMode
+                  ? "Disable Annotations"
+                  : "Enable Annotations"}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
+          {isAnnotationMode && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={isAnnotationToolboxOpen ? "default" : "ghost"}
+                    size="sm"
+                    onClick={toggleAnnotationToolbox}
+                    className={
+                      isAnnotationToolboxOpen
+                        ? "bg-primary text-primary-foreground"
+                        : ""
+                    }
+                  >
+                    <Palette className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {isAnnotationToolboxOpen
+                    ? "Hide Annotation Tools"
+                    : "Show Annotation Tools"}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
 
           {/* Screen Capture */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-8 w-8">
+              <Button variant="ghost" size="sm">
                 <Camera className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
@@ -544,7 +904,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
           {/* Screen Recorder */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-8 w-8">
+              <Button variant="ghost" size="sm">
                 <Video
                   className={`h-4 w-4 ${isRecording ? "text-red-500" : ""}`}
                 />
@@ -590,7 +950,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
         {/* Right side - Device selector and fullscreen */}
         <div className="flex items-center gap-1 ml-auto">
           <Select value={selectedDevice} onValueChange={setSelectedDevice}>
-            <SelectTrigger className="w-[140px] h-8 text-xs">
+            <SelectTrigger className="w-[120px] h-8 text-xs">
               <SelectValue placeholder="Device" />
             </SelectTrigger>
             <SelectContent>
@@ -608,12 +968,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={toggleFullscreen}
-                  className="h-8 w-8"
-                >
+                <Button variant="ghost" size="sm" onClick={toggleFullscreen}>
                   {isFullscreen ? (
                     <Minimize2 className="h-4 w-4" />
                   ) : (
@@ -629,52 +984,325 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
         </div>
       </div>
       {/* Viewport container */}
-      <div
-        className={`flex-1 flex justify-center items-start overflow-auto p-4 ${isFullscreen ? "bg-gray-900" : "bg-gray-100"}`}
-      >
+      <div className="relative flex-1">
         <div
-          className={`relative bg-white ${isFullscreen ? "" : "shadow-lg"}`}
-          style={{
-            width: isFullscreen ? "100%" : `${currentDevice.width}px`,
-            height: isFullscreen ? "100%" : `${currentDevice.height}px`,
-            maxWidth: "100%",
-            maxHeight: "100%",
-            overflow: "hidden",
-          }}
+          className={`flex justify-center items-start overflow-auto h-full ${isFullscreen ? "bg-gray-900 p-0" : "bg-gray-100 p-4"}`}
         >
-          {/* Loading indicator */}
-          {isLoading && (
-            <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10">
-              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
-            </div>
-          )}
-
-          {/* Website iframe */}
-          <iframe
-            ref={iframeRef}
-            src={currentUrl}
-            onLoad={handleIframeLoad}
-            className="w-full h-full border-0"
-            sandbox="allow-same-origin allow-scripts allow-forms allow-top-navigation allow-popups allow-modals"
-            allow="fullscreen; camera; microphone; geolocation; payment; autoplay"
-            referrerPolicy="no-referrer-when-downgrade"
-          />
-
-          {/* Annotation overlay */}
-          <LiveAnnotationOverlay
-            reviewId={reviewId}
-            tabId={currentTab}
-            tabColor="#4ade80"
-            width={isFullscreen ? window.innerWidth : currentDevice.width}
-            height={isFullscreen ? window.innerHeight : currentDevice.height}
-            scrollTop={scrollPosition.y}
-            scrollLeft={scrollPosition.x}
-            onAnnotationChange={(annotations) => {
-              // Handle annotation changes
-              console.log("Annotations updated:", annotations);
+          <div
+            className={`relative bg-white ${isFullscreen ? "" : "shadow-lg"}`}
+            style={{
+              width: isFullscreen ? "100vw" : `${scaledWidth}px`,
+              height: isFullscreen ? "100vh" : `${scaledHeight}px`,
+              maxWidth: isFullscreen ? "100vw" : "100%",
+              maxHeight: isFullscreen ? "100vh" : "100%",
+              overflow: "hidden",
+              transform: isFullscreen ? "none" : `scale(1)`,
             }}
-          />
+          >
+            {/* Loading indicator */}
+            {isLoading && (
+              <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10">
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+              </div>
+            )}
+
+            {/* Website iframe */}
+            <iframe
+              ref={iframeRef}
+              src={currentUrl}
+              onLoad={handleIframeLoad}
+              className="w-full h-full border-0"
+              style={{
+                width: isFullscreen ? "100vw" : `${currentDevice.width}px`,
+                height: isFullscreen ? "100vh" : `${currentDevice.height}px`,
+                transform: isFullscreen ? "none" : `scale(${zoomLevel})`,
+                transformOrigin: "top left",
+              }}
+              sandbox="allow-same-origin allow-scripts allow-forms allow-top-navigation allow-popups allow-modals allow-downloads"
+              allow="fullscreen; camera; microphone; geolocation; payment; autoplay; clipboard-read; clipboard-write"
+              referrerPolicy="no-referrer-when-downgrade"
+              onError={(e) => {
+                console.error("Iframe error:", e);
+                setIsLoading(false);
+              }}
+            />
+
+            {/* Annotation overlay */}
+            <LiveAnnotationOverlay
+              reviewId={reviewId}
+              tabId={magnetActiveTab}
+              tabColor={getTabColor(magnetActiveTab)}
+              width={isFullscreen ? window.innerWidth : currentDevice.width}
+              height={isFullscreen ? window.innerHeight : currentDevice.height}
+              scrollTop={scrollPosition.y}
+              scrollLeft={scrollPosition.x}
+              zoomLevel={isFullscreen ? 1.0 : zoomLevel}
+              isVisible={isAnnotationMode}
+              iframeRef={iframeRef}
+              onAnnotationChange={handleAnnotationChange}
+              activeTool={activeAnnotationTool}
+              selectedColor={annotationTool}
+              onToolChange={(tool) => setActiveAnnotationTool(tool)}
+              onColorChange={(color) => setAnnotationTool(color)}
+            />
+          </div>
         </div>
+
+        {/* Floating MAGNET Review Panel */}
+        {isMagnetPanelOpen && (
+          <>
+            {/* Backdrop */}
+            <div
+              className="absolute inset-0 bg-black/20 z-40"
+              onClick={toggleMagnetPanel}
+            />
+
+            {/* Floating Panel */}
+            <div className="absolute left-4 top-4 bottom-4 w-[380px] z-50 animate-in slide-in-from-left-4 duration-300">
+              <div className="bg-background border rounded-lg shadow-2xl h-full flex flex-col">
+                {/* Panel Header */}
+                <div className="flex items-center justify-between p-4 border-b">
+                  <h2 className="text-lg font-semibold">MAGNET Review</h2>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={toggleMagnetPanel}
+                    className="h-8 w-8 p-0"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+
+                {/* Panel Content */}
+                <div className="flex-1 overflow-hidden">
+                  <MagnetReviewPanel
+                    activeTab={magnetActiveTab}
+                    projectId={projectId}
+                    reviewId={reviewId}
+                    onTabChange={handleMagnetTabChange}
+                    onResponseSave={(tabId, questionId, answer, notes) => {
+                      console.log("Response saved:", {
+                        tabId,
+                        questionId,
+                        answer,
+                        notes,
+                      });
+                    }}
+                    onSubmit={(responses) => {
+                      console.log("Review submitted:", responses);
+                      toast({
+                        title: "Review submitted!",
+                        description:
+                          "Your MAGNET review has been submitted successfully.",
+                        duration: 5000,
+                      });
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Floating Annotation Toolbox */}
+        {isAnnotationMode && isAnnotationToolboxOpen && (
+          <div
+            className={`absolute ${isMagnetPanelOpen ? "left-[400px]" : "left-4"} top-1/2 transform -translate-y-1/2 z-50 animate-in slide-in-from-left-4 duration-300`}
+          >
+            <div className="bg-background/95 backdrop-blur-sm border rounded-lg shadow-2xl p-3 w-[70px]">
+              {/* Toolbox Header */}
+              <div className="text-xs font-medium text-muted-foreground mb-2 text-center">
+                Tools
+              </div>
+
+              <TooltipProvider>
+                {/* Tool Selection - Vertical Stack */}
+                <div className="flex flex-col gap-2 mb-3">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant={
+                          activeAnnotationTool === "select"
+                            ? "default"
+                            : "outline"
+                        }
+                        size="sm"
+                        onClick={() => setActiveAnnotationTool("select")}
+                        className="h-8 w-full"
+                      >
+                        <MousePointer className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      <p>Select</p>
+                    </TooltipContent>
+                  </Tooltip>
+
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant={
+                          activeAnnotationTool === "pen" ? "default" : "outline"
+                        }
+                        size="sm"
+                        onClick={() => setActiveAnnotationTool("pen")}
+                        className="h-8 w-full"
+                        style={
+                          activeAnnotationTool === "pen"
+                            ? {
+                                backgroundColor: annotationTool,
+                                color: "white",
+                              }
+                            : {}
+                        }
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      <p>Pen</p>
+                    </TooltipContent>
+                  </Tooltip>
+
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant={
+                          activeAnnotationTool === "highlighter"
+                            ? "default"
+                            : "outline"
+                        }
+                        size="sm"
+                        onClick={() => setActiveAnnotationTool("highlighter")}
+                        className="h-8 w-full"
+                        style={
+                          activeAnnotationTool === "highlighter"
+                            ? {
+                                backgroundColor: annotationTool + "50",
+                                color: annotationTool,
+                              }
+                            : {}
+                        }
+                      >
+                        <Highlighter className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      <p>Highlighter</p>
+                    </TooltipContent>
+                  </Tooltip>
+
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant={
+                          activeAnnotationTool === "text"
+                            ? "default"
+                            : "outline"
+                        }
+                        size="sm"
+                        onClick={() => setActiveAnnotationTool("text")}
+                        className="h-8 w-full"
+                      >
+                        <Type className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      <p>Text</p>
+                    </TooltipContent>
+                  </Tooltip>
+
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant={
+                          activeAnnotationTool === "arrow"
+                            ? "default"
+                            : "outline"
+                        }
+                        size="sm"
+                        onClick={() => setActiveAnnotationTool("arrow")}
+                        className="h-8 w-full"
+                      >
+                        <ArrowRight className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      <p>Arrow</p>
+                    </TooltipContent>
+                  </Tooltip>
+
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant={
+                          activeAnnotationTool === "rectangle"
+                            ? "default"
+                            : "outline"
+                        }
+                        size="sm"
+                        onClick={() => setActiveAnnotationTool("rectangle")}
+                        className="h-8 w-full"
+                      >
+                        <Square className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      <p>Rectangle</p>
+                    </TooltipContent>
+                  </Tooltip>
+
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant={
+                          activeAnnotationTool === "eraser"
+                            ? "default"
+                            : "outline"
+                        }
+                        size="sm"
+                        onClick={() => setActiveAnnotationTool("eraser")}
+                        className="h-8 w-full"
+                      >
+                        <Eraser className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      <p>Eraser</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+
+                {/* Color Selection - Vertical */}
+                <div className="mb-3">
+                  <div className="text-xs font-medium text-muted-foreground mb-2 text-center">
+                    Colors
+                  </div>
+                  <div className="flex flex-col gap-2 items-center">
+                    {ANNOTATION_COLORS.map((color) => (
+                      <Tooltip key={color.value}>
+                        <TooltipTrigger asChild>
+                          <button
+                            onClick={() => setAnnotationTool(color.value)}
+                            className={`w-8 h-8 rounded-full border-2 transition-all hover:scale-110 ${
+                              annotationTool === color.value
+                                ? "border-foreground shadow-md"
+                                : "border-border"
+                            }`}
+                            style={{ backgroundColor: color.value }}
+                          />
+                        </TooltipTrigger>
+                        <TooltipContent side="right">
+                          <p>{color.name}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    ))}
+                  </div>
+                </div>
+              </TooltipProvider>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
