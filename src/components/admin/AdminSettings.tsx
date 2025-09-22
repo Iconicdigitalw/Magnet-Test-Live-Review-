@@ -858,7 +858,9 @@ const AdminSettings: React.FC = () => {
               Back to App
             </Button>
             <div className="w-px h-6 bg-border" />
-            <h1 className="text-xl font-bold">MAGNET Admin Settings</h1>
+            <h1 className="text-xl font-bold">
+              MAGNET Test<sup className="text-xs">TM</sup> Live Admin Settings
+            </h1>
           </div>
           <Button variant="ghost" onClick={handleBackToApp}>
             <Home className="h-5 w-5" />
@@ -874,7 +876,8 @@ const AdminSettings: React.FC = () => {
               Question Management
             </h2>
             <p className="text-muted-foreground">
-              Manage MAGNET framework questions and scoring system
+              Manage MAGNET Test<sup className="text-xs">TM</sup> framework
+              questions and scoring system
             </p>
           </div>
           <div className="flex items-center gap-2">

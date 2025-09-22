@@ -106,7 +106,9 @@ const Home = () => {
         <header className="border-b bg-card">
           <div className="container flex h-16 items-center justify-between px-4">
             <div className="flex items-center space-x-4">
-              <h1 className="text-xl font-bold">MAGNET Review</h1>
+              <h1 className="text-xl font-bold">
+                MAGNET Test<sup className="text-xs">TM</sup> Live
+              </h1>
               <nav className="hidden md:flex space-x-4">
                 <Button
                   variant="ghost"

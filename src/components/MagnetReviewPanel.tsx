@@ -21,6 +21,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import {
@@ -30,6 +32,12 @@ import {
   type Question as SettingsQuestion,
   type MagnetCategory,
 } from "@/contexts/SettingsContext";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+  TooltipProvider,
+} from "@/components/ui/tooltip";
 
 // Use the Question type from SettingsContext for consistency
 type Question = SettingsQuestion;
@@ -67,6 +75,12 @@ const MagnetReviewPanelInner: React.FC<MagnetReviewPanelProps> = ({
 
   const [responses, setResponses] = useState<
     Record<string, { answer: string; notes: string }>
+  >({});
+  const [expandedSubOptions, setExpandedSubOptions] = useState<
+    Record<string, boolean>
+  >({});
+  const [showSelectedBall, setShowSelectedBall] = useState<
+    Record<string, boolean>
   >({});
   // Set initial tab to first available tab or fallback to activeTab prop
   const initialTab = magnetTabs.length > 0 ? magnetTabs[0].id : activeTab;
@@ -131,8 +145,36 @@ const MagnetReviewPanelInner: React.FC<MagnetReviewPanelProps> = ({
       // Trigger auto-save
       triggerAutoSave(updatedResponses);
 
+      // Handle sub-options expansion
+      if (answer === "needs_work") {
+        setExpandedSubOptions((prev) => ({
+          ...prev,
+          [questionId]: true,
+        }));
+      } else {
+        setExpandedSubOptions((prev) => ({
+          ...prev,
+          [questionId]: false,
+        }));
+      }
+
       return updatedResponses;
     });
+  };
+
+  const handleSubOptionChange = (
+    questionId: string,
+    mainValue: string,
+    subValue: string,
+  ) => {
+    const combinedAnswer = `${mainValue}:${subValue}`;
+    handleResponseChange(questionId, combinedAnswer);
+
+    // Also expand the sub-options when a sub-option is selected
+    setExpandedSubOptions((prev) => ({
+      ...prev,
+      [questionId]: true,
+    }));
   };
 
   const handleNotesChange = (questionId: string, notes: string) => {
@@ -411,96 +453,289 @@ const MagnetReviewPanelInner: React.FC<MagnetReviewPanelProps> = ({
                       </CardHeader>
                       <CardContent className={isAnswered ? "opacity-75" : ""}>
                         {question.type === "multiple_choice" ? (
-                          <RadioGroup
-                            value={responses[question.id]?.answer || ""}
-                            onValueChange={(value) =>
-                              handleResponseChange(question.id, value)
-                            }
-                            className="flex flex-col space-y-1"
-                          >
-                            {question.config?.options?.map((option) => {
-                              const getIconForOption = (
-                                value: string,
-                                points: number,
-                              ) => {
-                                if (points >= 0.8)
+                          <div className="space-y-3">
+                            <RadioGroup
+                              value={
+                                responses[question.id]?.answer?.includes(":")
+                                  ? responses[question.id]?.answer?.split(
+                                      ":",
+                                    )[0]
+                                  : responses[question.id]?.answer || ""
+                              }
+                              onValueChange={(value) => {
+                                handleResponseChange(question.id, value);
+                              }}
+                              className="flex flex-col space-y-1"
+                            >
+                              {question.config?.options?.map((option) => {
+                                const getIconForOption = (
+                                  value: string,
+                                  points: number,
+                                ) => {
+                                  if (points >= 0.8)
+                                    return (
+                                      <CheckCircle className="w-4 h-4 mr-1 text-green-500" />
+                                    );
+                                  if (points >= 0.3)
+                                    return (
+                                      <HelpCircle className="w-4 h-4 mr-1 text-amber-500" />
+                                    );
                                   return (
-                                    <CheckCircle className="w-4 h-4 mr-1 text-green-500" />
-                                  );
-                                if (points >= 0.3)
-                                  return (
-                                    <HelpCircle className="w-4 h-4 mr-1 text-amber-500" />
-                                  );
-                                return (
-                                  <AlertCircle className="w-4 h-4 mr-1 text-red-500" />
-                                );
-                              };
-
-                              return (
-                                <div
-                                  key={option.value}
-                                  className="flex items-center space-x-2"
-                                >
-                                  <RadioGroupItem
-                                    value={option.value}
-                                    id={`${question.id}-${option.value}`}
-                                  />
-                                  <Label
-                                    htmlFor={`${question.id}-${option.value}`}
-                                    className="flex items-center"
-                                  >
-                                    {getIconForOption(
-                                      option.value,
-                                      option.points || 0,
-                                    )}
-                                    {option.label}
-                                  </Label>
-                                </div>
-                              );
-                            }) || (
-                              // Fallback to default options if no custom options
-                              <>
-                                <div className="flex items-center space-x-2">
-                                  <RadioGroupItem
-                                    value="yes"
-                                    id={`${question.id}-yes`}
-                                  />
-                                  <Label
-                                    htmlFor={`${question.id}-yes`}
-                                    className="flex items-center"
-                                  >
-                                    <CheckCircle className="w-4 h-4 mr-1 text-green-500" />
-                                    Yes
-                                  </Label>
-                                </div>
-                                <div className="flex items-center space-x-2">
-                                  <RadioGroupItem
-                                    value="no"
-                                    id={`${question.id}-no`}
-                                  />
-                                  <Label
-                                    htmlFor={`${question.id}-no`}
-                                    className="flex items-center"
-                                  >
                                     <AlertCircle className="w-4 h-4 mr-1 text-red-500" />
-                                    No
-                                  </Label>
-                                </div>
-                                <div className="flex items-center space-x-2">
-                                  <RadioGroupItem
-                                    value="needs_work"
-                                    id={`${question.id}-needs-work`}
-                                  />
-                                  <Label
-                                    htmlFor={`${question.id}-needs-work`}
-                                    className="flex items-center"
-                                  >
-                                    <HelpCircle className="w-4 h-4 mr-1 text-amber-500" />
-                                    Needs Work
-                                  </Label>
-                                </div>
-                              </>
-                            )}
+                                  );
+                                };
+
+                                return (
+                                  <div key={option.value} className="space-y-2">
+                                    <div className="flex items-center space-x-2">
+                                      <RadioGroupItem
+                                        value={option.value}
+                                        id={`${question.id}-${option.value}`}
+                                        checked={
+                                          option.value === "needs_work"
+                                            ? responses[
+                                                question.id
+                                              ]?.answer?.startsWith(
+                                                "needs_work:",
+                                              )
+                                            : responses[question.id]?.answer ===
+                                              option.value
+                                        }
+                                      />
+                                      <Label
+                                        htmlFor={`${question.id}-${option.value}`}
+                                        className="flex items-center"
+                                      >
+                                        {getIconForOption(
+                                          option.value,
+                                          option.points || 0,
+                                        )}
+                                        {option.label}
+                                        {option.value === "needs_work" && (
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.preventDefault();
+                                              setShowSelectedBall((prev) => ({
+                                                ...prev,
+                                                [question.id]:
+                                                  !prev[question.id],
+                                              }));
+                                            }}
+                                            className="ml-2 p-1 hover:bg-muted rounded transition-colors"
+                                            title={
+                                              showSelectedBall[question.id]
+                                                ? "Hide all options"
+                                                : "Show all options"
+                                            }
+                                          >
+                                            {showSelectedBall[question.id] ? (
+                                              <EyeOff className="h-3 w-3 text-muted-foreground" />
+                                            ) : (
+                                              <Eye className="h-3 w-3 text-muted-foreground" />
+                                            )}
+                                          </button>
+                                        )}
+                                      </Label>
+                                      {/* Show selected ball by default when needs_work is selected */}
+                                      {option.value === "needs_work" &&
+                                        responses[
+                                          question.id
+                                        ]?.answer?.startsWith(
+                                          "needs_work:",
+                                        ) && (
+                                          <div className="ml-2">
+                                            {(() => {
+                                              const subValue =
+                                                responses[
+                                                  question.id
+                                                ]?.answer?.split(":")[1];
+                                              const selectedSubOption =
+                                                option.subOptions?.find(
+                                                  (subOpt) =>
+                                                    subOpt.value === subValue,
+                                                );
+                                              return selectedSubOption ? (
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    setShowSelectedBall(
+                                                      (prev) => ({
+                                                        ...prev,
+                                                        [question.id]:
+                                                          !prev[question.id],
+                                                      }),
+                                                    );
+                                                  }}
+                                                  className="text-lg hover:scale-110 transition-transform cursor-pointer"
+                                                  title={`${selectedSubOption.label} - Click to ${showSelectedBall[question.id] ? "hide" : "show"} all options`}
+                                                >
+                                                  {selectedSubOption.color}
+                                                </button>
+                                              ) : null;
+                                            })()}
+                                          </div>
+                                        )}
+                                    </div>
+
+                                    {/* Sub-options for "needs_work" */}
+                                    {option.value === "needs_work" &&
+                                      (expandedSubOptions[question.id] ||
+                                        showSelectedBall[question.id]) &&
+                                      option.subOptions &&
+                                      !responses[question.id]?.answer?.includes(
+                                        ":",
+                                      ) && (
+                                        <div className="ml-6 mt-2 p-3 bg-muted/30 rounded-lg border-l-2 border-amber-300">
+                                          <div className="text-xs text-muted-foreground mb-2">
+                                            How much work is needed?
+                                          </div>
+                                          <div className="flex items-center space-x-2">
+                                            <TooltipProvider>
+                                              {option.subOptions.map(
+                                                (subOption) => {
+                                                  const isSelected =
+                                                    responses[question.id]
+                                                      ?.answer ===
+                                                    `${option.value}:${subOption.value}`;
+                                                  return (
+                                                    <Tooltip
+                                                      key={subOption.value}
+                                                    >
+                                                      <TooltipTrigger asChild>
+                                                        <button
+                                                          type="button"
+                                                          onClick={() =>
+                                                            handleSubOptionChange(
+                                                              question.id,
+                                                              option.value,
+                                                              subOption.value,
+                                                            )
+                                                          }
+                                                          className={`text-2xl transition-all duration-200 hover:scale-110 ${
+                                                            isSelected
+                                                              ? "ring-2 ring-primary ring-offset-2 rounded-full"
+                                                              : "hover:opacity-80"
+                                                          }`}
+                                                        >
+                                                          {subOption.color}
+                                                        </button>
+                                                      </TooltipTrigger>
+                                                      <TooltipContent>
+                                                        <p className="text-sm font-medium">
+                                                          {subOption.label}
+                                                        </p>
+                                                      </TooltipContent>
+                                                    </Tooltip>
+                                                  );
+                                                },
+                                              )}
+                                            </TooltipProvider>
+                                          </div>
+                                        </div>
+                                      )}
+                                    {/* Show sub-options when a ball is selected and user wants to see all options */}
+                                    {option.value === "needs_work" &&
+                                      showSelectedBall[question.id] &&
+                                      option.subOptions &&
+                                      responses[question.id]?.answer?.includes(
+                                        ":",
+                                      ) && (
+                                        <div className="ml-6 mt-2 p-3 bg-muted/30 rounded-lg border-l-2 border-amber-300">
+                                          <div className="text-xs text-muted-foreground mb-2">
+                                            How much work is needed?
+                                          </div>
+                                          <div className="flex items-center space-x-2">
+                                            <TooltipProvider>
+                                              {option.subOptions.map(
+                                                (subOption) => {
+                                                  const isSelected =
+                                                    responses[question.id]
+                                                      ?.answer ===
+                                                    `${option.value}:${subOption.value}`;
+                                                  return (
+                                                    <Tooltip
+                                                      key={subOption.value}
+                                                    >
+                                                      <TooltipTrigger asChild>
+                                                        <button
+                                                          type="button"
+                                                          onClick={() =>
+                                                            handleSubOptionChange(
+                                                              question.id,
+                                                              option.value,
+                                                              subOption.value,
+                                                            )
+                                                          }
+                                                          className={`text-2xl transition-all duration-200 hover:scale-110 ${
+                                                            isSelected
+                                                              ? "ring-2 ring-primary ring-offset-2 rounded-full"
+                                                              : "hover:opacity-80"
+                                                          }`}
+                                                        >
+                                                          {subOption.color}
+                                                        </button>
+                                                      </TooltipTrigger>
+                                                      <TooltipContent>
+                                                        <p className="text-sm font-medium">
+                                                          {subOption.label}
+                                                        </p>
+                                                      </TooltipContent>
+                                                    </Tooltip>
+                                                  );
+                                                },
+                                              )}
+                                            </TooltipProvider>
+                                          </div>
+                                        </div>
+                                      )}
+                                  </div>
+                                );
+                              }) || (
+                                // Fallback to default options if no custom options
+                                <>
+                                  <div className="flex items-center space-x-2">
+                                    <RadioGroupItem
+                                      value="yes"
+                                      id={`${question.id}-yes`}
+                                    />
+                                    <Label
+                                      htmlFor={`${question.id}-yes`}
+                                      className="flex items-center"
+                                    >
+                                      <CheckCircle className="w-4 h-4 mr-1 text-green-500" />
+                                      Yes
+                                    </Label>
+                                  </div>
+                                  <div className="flex items-center space-x-2">
+                                    <RadioGroupItem
+                                      value="no"
+                                      id={`${question.id}-no`}
+                                    />
+                                    <Label
+                                      htmlFor={`${question.id}-no`}
+                                      className="flex items-center"
+                                    >
+                                      <AlertCircle className="w-4 h-4 mr-1 text-red-500" />
+                                      No
+                                    </Label>
+                                  </div>
+                                  <div className="flex items-center space-x-2">
+                                    <RadioGroupItem
+                                      value="needs_work"
+                                      id={`${question.id}-needs-work`}
+                                    />
+                                    <Label
+                                      htmlFor={`${question.id}-needs-work`}
+                                      className="flex items-center"
+                                    >
+                                      <HelpCircle className="w-4 h-4 mr-1 text-amber-500" />
+                                      Needs Work
+                                    </Label>
+                                  </div>
+                                </>
+                              )}
+                            </RadioGroup>
                             <Separator className="my-2" />
                             <Textarea
                               placeholder="Add notes (optional)"
@@ -510,7 +745,7 @@ const MagnetReviewPanelInner: React.FC<MagnetReviewPanelProps> = ({
                                 handleNotesChange(question.id, e.target.value)
                               }
                             />
-                          </RadioGroup>
+                          </div>
                         ) : question.type === "rating" ? (
                           <div className="space-y-3">
                             <div className="flex items-center justify-between text-sm text-muted-foreground">

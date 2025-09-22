@@ -19,6 +19,12 @@ export interface Question {
       value: string;
       label: string;
       points?: number; // Points multiplier for this option (0-1)
+      subOptions?: Array<{
+        value: string;
+        label: string;
+        color: string;
+        points: number; // Points multiplier for sub-option (0-1)
+      }>;
     }>;
     // For rating questions
     rating?: {
@@ -86,374 +92,1255 @@ export const SettingsContext = createContext<SettingsContextType | undefined>(
   undefined,
 );
 
-// Default MAGNET categories with scoring
+// Default MAGNET categories with scoring based on The Magnet Test
 const defaultMagnetCategories: MagnetCategory[] = [
   {
     id: "M",
-    name: "Magnetic Captivation",
+    name: "Manna Magnetic Captivation",
     description:
-      "Pass the 1-second Attention & Instant Clarity check. Clear, bold messaging that earns attention fast and makes them curious to stay beyond the 1-second skim.",
+      "In the first 1 to 3 seconds, does your website share a strong, clear message or bold promise that grabs visitors' attention and makes them curious to learn more or act?",
     color: "bg-red-500",
     questions: [
       {
         id: "m1",
-        text: "Does the website pass the 1-second attention test?",
+        text: "In the first 1 to 3 seconds, does your website share a strong, clear message or bold promise that grabs visitors' attention and makes them curious to learn more or act?",
         type: "multiple_choice",
-        points: 20,
+        points: 35,
         required: true,
         config: {
           options: [
             { value: "yes", label: "Yes", points: 1.0 },
-            { value: "needs_work", label: "Needs Work", points: 0.5 },
+            {
+              value: "needs_work",
+              label: "Needs Work",
+              points: 0.5,
+              subOptions: [
+                {
+                  value: "almost_there",
+                  label: "Almost There",
+                  color: "🔵",
+                  points: 0.7,
+                },
+                {
+                  value: "needs_bit_work",
+                  label: "Needs a Bit of Work",
+                  color: "🟡",
+                  points: 0.5,
+                },
+                {
+                  value: "moderate_rework",
+                  label: "Moderate Rework",
+                  color: "🟠",
+                  points: 0.4,
+                },
+                {
+                  value: "significant_fixes",
+                  label: "Significant Fixes",
+                  color: "🔴",
+                  points: 0.3,
+                },
+                {
+                  value: "complete_overhaul",
+                  label: "Complete Overhaul",
+                  color: "⚫",
+                  points: 0.2,
+                },
+              ],
+            },
             { value: "no", label: "No", points: 0.0 },
           ],
         },
       },
       {
         id: "m2",
-        text: "Is there clear, bold messaging that earns attention fast?",
+        text: "Does your site instantly show an image or video that deeply resonates with what visitors truly desire or need?",
         type: "multiple_choice",
-        points: 20,
+        points: 35,
         required: true,
         config: {
           options: [
             { value: "yes", label: "Yes", points: 1.0 },
-            { value: "needs_work", label: "Needs Work", points: 0.5 },
+            {
+              value: "needs_work",
+              label: "Needs Work",
+              points: 0.5,
+              subOptions: [
+                {
+                  value: "almost_there",
+                  label: "Almost There",
+                  color: "🔵",
+                  points: 0.7,
+                },
+                {
+                  value: "needs_bit_work",
+                  label: "Needs a Bit of Work",
+                  color: "🟡",
+                  points: 0.5,
+                },
+                {
+                  value: "moderate_rework",
+                  label: "Moderate Rework",
+                  color: "🟠",
+                  points: 0.4,
+                },
+                {
+                  value: "significant_fixes",
+                  label: "Significant Fixes",
+                  color: "🔴",
+                  points: 0.3,
+                },
+                {
+                  value: "complete_overhaul",
+                  label: "Complete Overhaul",
+                  color: "⚫",
+                  points: 0.2,
+                },
+              ],
+            },
             { value: "no", label: "No", points: 0.0 },
           ],
         },
       },
       {
         id: "m3",
-        text: "Does it make visitors curious to stay beyond the 1-second skim?",
+        text: "Can a fifth grader easily & instantly understand exactly WHAT your solution is without asking &quot;what do you do&quot;?",
         type: "multiple_choice",
-        points: 20,
+        points: 30,
         required: true,
-      },
-      {
-        id: "m4",
-        text: "Is bounce-worthy confusion eliminated at the top?",
-        type: "multiple_choice",
-        points: 20,
-        required: true,
-      },
-      {
-        id: "m5",
-        text: "Does the website stop the scroll and speak directly to the dream client?",
-        type: "multiple_choice",
-        points: 20,
-        required: true,
-      },
-      {
-        id: "m6",
-        text: "Additional notes on magnetic captivation:",
-        type: "text",
-        points: 0,
-        required: false,
         config: {
-          text: {
-            placeholder: "Enter your observations and recommendations...",
-            maxLength: 1000,
-            multiline: true,
-          },
+          options: [
+            { value: "yes", label: "Yes", points: 1.0 },
+            {
+              value: "needs_work",
+              label: "Needs Work",
+              points: 0.5,
+              subOptions: [
+                {
+                  value: "almost_there",
+                  label: "Almost There",
+                  color: "🔵",
+                  points: 0.7,
+                },
+                {
+                  value: "needs_bit_work",
+                  label: "Needs a Bit of Work",
+                  color: "🟡",
+                  points: 0.5,
+                },
+                {
+                  value: "moderate_rework",
+                  label: "Moderate Rework",
+                  color: "🟠",
+                  points: 0.4,
+                },
+                {
+                  value: "significant_fixes",
+                  label: "Significant Fixes",
+                  color: "🔴",
+                  points: 0.3,
+                },
+                {
+                  value: "complete_overhaul",
+                  label: "Complete Overhaul",
+                  color: "⚫",
+                  points: 0.2,
+                },
+              ],
+            },
+            { value: "no", label: "No", points: 0.0 },
+          ],
         },
       },
     ],
   },
   {
     id: "A",
-    name: "Authentic Connection",
+    name: "Activate Authentic Connection",
     description:
-      'Trigger the "they get me" response that keeps visitors engaged. Position yourself as the trusted guide and build emotional, logical, and philosophical connection in seconds.',
+      "Do you use the exact words and phrases your ideal clients use to describe their biggest challenges or desired outcomes?",
     color: "bg-blue-500",
     questions: [
       {
         id: "a1",
-        text: 'Does the website trigger the "they get me" response?',
+        text: "Do you use the exact words and phrases your ideal clients use to describe their biggest challenges or desired outcomes?",
         type: "multiple_choice",
-        points: 17,
+        points: 25,
         required: true,
+        config: {
+          options: [
+            { value: "yes", label: "Yes", points: 1.0 },
+            {
+              value: "needs_work",
+              label: "Needs Work",
+              points: 0.5,
+              subOptions: [
+                {
+                  value: "almost_there",
+                  label: "Almost There",
+                  color: "🔵",
+                  points: 0.7,
+                },
+                {
+                  value: "needs_bit_work",
+                  label: "Needs a Bit of Work",
+                  color: "🟡",
+                  points: 0.5,
+                },
+                {
+                  value: "moderate_rework",
+                  label: "Moderate Rework",
+                  color: "🟠",
+                  points: 0.4,
+                },
+                {
+                  value: "significant_fixes",
+                  label: "Significant Fixes",
+                  color: "🔴",
+                  points: 0.3,
+                },
+                {
+                  value: "complete_overhaul",
+                  label: "Complete Overhaul",
+                  color: "⚫",
+                  points: 0.2,
+                },
+              ],
+            },
+            { value: "no", label: "No", points: 0.0 },
+          ],
+        },
       },
       {
         id: "a2",
-        text: "Is the brand positioned as a trusted guide, not just another expert?",
+        text: "Does your site provide clear and logical reasons why visitors should choose you/your solution?",
         type: "multiple_choice",
-        points: 17,
+        points: 25,
         required: true,
+        config: {
+          options: [
+            { value: "yes", label: "Yes", points: 1.0 },
+            {
+              value: "needs_work",
+              label: "Needs Work",
+              points: 0.5,
+              subOptions: [
+                {
+                  value: "almost_there",
+                  label: "Almost There",
+                  color: "🔵",
+                  points: 0.7,
+                },
+                {
+                  value: "needs_bit_work",
+                  label: "Needs a Bit of Work",
+                  color: "🟡",
+                  points: 0.5,
+                },
+                {
+                  value: "moderate_rework",
+                  label: "Moderate Rework",
+                  color: "🟠",
+                  points: 0.4,
+                },
+                {
+                  value: "significant_fixes",
+                  label: "Significant Fixes",
+                  color: "🔴",
+                  points: 0.3,
+                },
+                {
+                  value: "complete_overhaul",
+                  label: "Complete Overhaul",
+                  color: "⚫",
+                  points: 0.2,
+                },
+              ],
+            },
+            { value: "no", label: "No", points: 0.0 },
+          ],
+        },
       },
       {
         id: "a3",
-        text: "Does it build emotional connection in seconds?",
+        text: "Within moments, can website visitors understand HOW your solution works and clearly see what makes it different from alternatives?",
         type: "multiple_choice",
-        points: 16,
+        points: 25,
         required: true,
+        config: {
+          options: [
+            { value: "yes", label: "Yes", points: 1.0 },
+            {
+              value: "needs_work",
+              label: "Needs Work",
+              points: 0.5,
+              subOptions: [
+                {
+                  value: "almost_there",
+                  label: "Almost There",
+                  color: "🔵",
+                  points: 0.7,
+                },
+                {
+                  value: "needs_bit_work",
+                  label: "Needs a Bit of Work",
+                  color: "🟡",
+                  points: 0.5,
+                },
+                {
+                  value: "moderate_rework",
+                  label: "Moderate Rework",
+                  color: "🟠",
+                  points: 0.4,
+                },
+                {
+                  value: "significant_fixes",
+                  label: "Significant Fixes",
+                  color: "🔴",
+                  points: 0.3,
+                },
+                {
+                  value: "complete_overhaul",
+                  label: "Complete Overhaul",
+                  color: "⚫",
+                  points: 0.2,
+                },
+              ],
+            },
+            { value: "no", label: "No", points: 0.0 },
+          ],
+        },
       },
       {
         id: "a4",
-        text: "Does it build logical connection that makes sense?",
+        text: "How well does your site align with/address your potential clients' philosophies or beliefs?",
         type: "multiple_choice",
-        points: 17,
+        points: 25,
         required: true,
-      },
-      {
-        id: "a5",
-        text: "Does it make strangers feel credible and trustworthy in seconds?",
-        type: "multiple_choice",
-        points: 16,
-        required: true,
-      },
-      {
-        id: "a6",
-        text: "Does the website avoid feeling cold, robotic, or disconnected?",
-        type: "multiple_choice",
-        points: 17,
-        required: true,
-      },
-      {
-        id: "a7",
-        text: "Does the website avoid feeling cold, robotic, or disconnected?",
-        type: "text",
-        points: 0,
-        required: false,
+        config: {
+          options: [
+            { value: "excellent", label: "Excellent", points: 1.0 },
+            { value: "good", label: "Good", points: 0.75 },
+            {
+              value: "needs_work",
+              label: "Needs Work",
+              points: 0.5,
+              subOptions: [
+                {
+                  value: "almost_there",
+                  label: "Almost There",
+                  color: "🔵",
+                  points: 0.7,
+                },
+                {
+                  value: "needs_bit_work",
+                  label: "Needs a Bit of Work",
+                  color: "🟡",
+                  points: 0.5,
+                },
+                {
+                  value: "moderate_rework",
+                  label: "Moderate Rework",
+                  color: "🟠",
+                  points: 0.4,
+                },
+                {
+                  value: "significant_fixes",
+                  label: "Significant Fixes",
+                  color: "🔴",
+                  points: 0.3,
+                },
+                {
+                  value: "complete_overhaul",
+                  label: "Complete Overhaul",
+                  color: "⚫",
+                  points: 0.2,
+                },
+              ],
+            },
+            { value: "poor", label: "Poor", points: 0.0 },
+          ],
+        },
       },
     ],
   },
   {
     id: "G",
-    name: "GOLDEN Persuasion",
+    name: "Guide with GOLDEN Persuasion",
     description:
-      "Ethically boost conversions with persuasive storytelling. Make them sense your authority, trust your credibility, and build confidence to say YES fast.",
+      "Is your website messaging framed as an engaging, persuasive story?",
     color: "bg-yellow-500",
     questions: [
       {
         id: "g1",
-        text: "Does the website ethically boost conversions with persuasive storytelling?",
+        text: "Is your website messaging framed as an engaging, persuasive story?",
         type: "multiple_choice",
-        points: 17,
+        points: 15,
         required: true,
+        config: {
+          options: [
+            { value: "yes", label: "Yes", points: 1.0 },
+            {
+              value: "needs_work",
+              label: "Needs Work",
+              points: 0.5,
+              subOptions: [
+                {
+                  value: "almost_there",
+                  label: "Almost There",
+                  color: "🔵",
+                  points: 0.7,
+                },
+                {
+                  value: "needs_bit_work",
+                  label: "Needs a Bit of Work",
+                  color: "🟡",
+                  points: 0.5,
+                },
+                {
+                  value: "moderate_rework",
+                  label: "Moderate Rework",
+                  color: "🟠",
+                  points: 0.4,
+                },
+                {
+                  value: "significant_fixes",
+                  label: "Significant Fixes",
+                  color: "🔴",
+                  points: 0.3,
+                },
+                {
+                  value: "complete_overhaul",
+                  label: "Complete Overhaul",
+                  color: "⚫",
+                  points: 0.2,
+                },
+              ],
+            },
+            { value: "no", label: "No", points: 0.0 },
+          ],
+        },
       },
       {
         id: "g2",
-        text: "Do visitors sense authority and trust credibility?",
+        text: "Is your website intentionally crafted to answer your ideal client's &quot;unspoken&quot; objections, fears, and concerns?",
         type: "multiple_choice",
-        points: 17,
+        points: 15,
         required: true,
+        config: {
+          options: [
+            { value: "yes", label: "Yes", points: 1.0 },
+            {
+              value: "needs_work",
+              label: "Needs Work",
+              points: 0.5,
+              subOptions: [
+                {
+                  value: "almost_there",
+                  label: "Almost There",
+                  color: "🔵",
+                  points: 0.7,
+                },
+                {
+                  value: "needs_bit_work",
+                  label: "Needs a Bit of Work",
+                  color: "🟡",
+                  points: 0.5,
+                },
+                {
+                  value: "moderate_rework",
+                  label: "Moderate Rework",
+                  color: "🟠",
+                  points: 0.4,
+                },
+                {
+                  value: "significant_fixes",
+                  label: "Significant Fixes",
+                  color: "🔴",
+                  points: 0.3,
+                },
+                {
+                  value: "complete_overhaul",
+                  label: "Complete Overhaul",
+                  color: "⚫",
+                  points: 0.2,
+                },
+              ],
+            },
+            { value: "no", label: "No", points: 0.0 },
+          ],
+        },
       },
       {
         id: "g3",
-        text: "Does the strategic content answer silent objections?",
+        text: "Is your website equipped with lead magnets (like free downloads or videos) to show hesitant prospects the value you deliver?",
         type: "multiple_choice",
-        points: 16,
+        points: 15,
         required: true,
+        config: {
+          options: [
+            { value: "yes", label: "Yes", points: 1.0 },
+            {
+              value: "needs_work",
+              label: "Needs Work",
+              points: 0.5,
+              subOptions: [
+                {
+                  value: "almost_there",
+                  label: "Almost There",
+                  color: "🔵",
+                  points: 0.7,
+                },
+                {
+                  value: "needs_bit_work",
+                  label: "Needs a Bit of Work",
+                  color: "🟡",
+                  points: 0.5,
+                },
+                {
+                  value: "moderate_rework",
+                  label: "Moderate Rework",
+                  color: "🟠",
+                  points: 0.4,
+                },
+                {
+                  value: "significant_fixes",
+                  label: "Significant Fixes",
+                  color: "🔴",
+                  points: 0.3,
+                },
+                {
+                  value: "complete_overhaul",
+                  label: "Complete Overhaul",
+                  color: "⚫",
+                  points: 0.2,
+                },
+              ],
+            },
+            { value: "no", label: "No", points: 0.0 },
+          ],
+        },
       },
       {
         id: "g4",
-        text: "Does it address risks and frictions effectively?",
+        text: "Do you have a CRM system integrated with your website for automated lead segmentation, nurture & follow-ups?",
         type: "multiple_choice",
-        points: 17,
+        points: 15,
         required: true,
+        config: {
+          options: [
+            { value: "yes", label: "Yes", points: 1.0 },
+            {
+              value: "needs_work",
+              label: "Needs Work",
+              points: 0.5,
+              subOptions: [
+                {
+                  value: "almost_there",
+                  label: "Almost There",
+                  color: "🔵",
+                  points: 0.7,
+                },
+                {
+                  value: "needs_bit_work",
+                  label: "Needs a Bit of Work",
+                  color: "🟡",
+                  points: 0.5,
+                },
+                {
+                  value: "moderate_rework",
+                  label: "Moderate Rework",
+                  color: "🟠",
+                  points: 0.4,
+                },
+                {
+                  value: "significant_fixes",
+                  label: "Significant Fixes",
+                  color: "🔴",
+                  points: 0.3,
+                },
+                {
+                  value: "complete_overhaul",
+                  label: "Complete Overhaul",
+                  color: "⚫",
+                  points: 0.2,
+                },
+              ],
+            },
+            { value: "no", label: "No", points: 0.0 },
+          ],
+        },
       },
       {
         id: "g5",
-        text: "Does it build credibility, authority, and confidence to say YES fast?",
+        text: "Do you use scarcity tactics, like limited-time offers or availability alerts, to create a sense of urgency for visitors?",
         type: "multiple_choice",
-        points: 16,
+        points: 15,
         required: true,
+        config: {
+          options: [
+            { value: "yes", label: "Yes", points: 1.0 },
+            {
+              value: "needs_work",
+              label: "Needs Work",
+              points: 0.5,
+              subOptions: [
+                {
+                  value: "almost_there",
+                  label: "Almost There",
+                  color: "🔵",
+                  points: 0.7,
+                },
+                {
+                  value: "needs_bit_work",
+                  label: "Needs a Bit of Work",
+                  color: "🟡",
+                  points: 0.5,
+                },
+                {
+                  value: "moderate_rework",
+                  label: "Moderate Rework",
+                  color: "🟠",
+                  points: 0.4,
+                },
+                {
+                  value: "significant_fixes",
+                  label: "Significant Fixes",
+                  color: "🔴",
+                  points: 0.3,
+                },
+                {
+                  value: "complete_overhaul",
+                  label: "Complete Overhaul",
+                  color: "⚫",
+                  points: 0.2,
+                },
+              ],
+            },
+            { value: "no", label: "No", points: 0.0 },
+          ],
+        },
       },
       {
         id: "g6",
-        text: "Does it guide people toward action without pressure, manipulation, confusion, or doubt?",
+        text: "Are your call-to-action (CTA) buttons prominent and visually distinct from other content, making it effortless for visitors to find and click them?",
         type: "multiple_choice",
-        points: 17,
+        points: 15,
         required: true,
+        config: {
+          options: [
+            { value: "yes", label: "Yes", points: 1.0 },
+            {
+              value: "needs_work",
+              label: "Needs Work",
+              points: 0.5,
+              subOptions: [
+                {
+                  value: "almost_there",
+                  label: "Almost There",
+                  color: "🔵",
+                  points: 0.7,
+                },
+                {
+                  value: "needs_bit_work",
+                  label: "Needs a Bit of Work",
+                  color: "🟡",
+                  points: 0.5,
+                },
+                {
+                  value: "moderate_rework",
+                  label: "Moderate Rework",
+                  color: "🟠",
+                  points: 0.4,
+                },
+                {
+                  value: "significant_fixes",
+                  label: "Significant Fixes",
+                  color: "🔴",
+                  points: 0.3,
+                },
+                {
+                  value: "complete_overhaul",
+                  label: "Complete Overhaul",
+                  color: "⚫",
+                  points: 0.2,
+                },
+              ],
+            },
+            { value: "no", label: "No", points: 0.0 },
+          ],
+        },
       },
       {
         id: "g7",
-        text: "Additional notes on GOLDEN persuasion:",
-        type: "text",
-        points: 0,
-        required: false,
+        text: "In the first 3 seconds on your site, can visitors spot trust and credibility markers, such as reviews, testimonials, or trust badges?",
+        type: "multiple_choice",
+        points: 15,
+        required: true,
+        config: {
+          options: [
+            { value: "yes", label: "Yes", points: 1.0 },
+            {
+              value: "needs_work",
+              label: "Needs Work",
+              points: 0.5,
+              subOptions: [
+                {
+                  value: "almost_there",
+                  label: "Almost There",
+                  color: "🔵",
+                  points: 0.7,
+                },
+                {
+                  value: "needs_bit_work",
+                  label: "Needs a Bit of Work",
+                  color: "🟡",
+                  points: 0.5,
+                },
+                {
+                  value: "moderate_rework",
+                  label: "Moderate Rework",
+                  color: "🟠",
+                  points: 0.4,
+                },
+                {
+                  value: "significant_fixes",
+                  label: "Significant Fixes",
+                  color: "🔴",
+                  points: 0.3,
+                },
+                {
+                  value: "complete_overhaul",
+                  label: "Complete Overhaul",
+                  color: "⚫",
+                  points: 0.2,
+                },
+              ],
+            },
+            { value: "no", label: "No", points: 0.0 },
+          ],
+        },
+      },
+      {
+        id: "g8",
+        text: "Is there a clear privacy policy and terms of service on your website to help build trust and transparency with visitors?",
+        type: "multiple_choice",
+        points: 15,
+        required: true,
+        config: {
+          options: [
+            { value: "yes", label: "Yes", points: 1.0 },
+            {
+              value: "needs_work",
+              label: "Needs Work",
+              points: 0.5,
+              subOptions: [
+                {
+                  value: "almost_there",
+                  label: "Almost There",
+                  color: "🔵",
+                  points: 0.7,
+                },
+                {
+                  value: "needs_bit_work",
+                  label: "Needs a Bit of Work",
+                  color: "🟡",
+                  points: 0.5,
+                },
+                {
+                  value: "moderate_rework",
+                  label: "Moderate Rework",
+                  color: "🟠",
+                  points: 0.4,
+                },
+                {
+                  value: "significant_fixes",
+                  label: "Significant Fixes",
+                  color: "🔴",
+                  points: 0.3,
+                },
+                {
+                  value: "complete_overhaul",
+                  label: "Complete Overhaul",
+                  color: "⚫",
+                  points: 0.2,
+                },
+              ],
+            },
+            { value: "no", label: "No", points: 0.0 },
+          ],
+        },
       },
     ],
   },
   {
     id: "N",
-    name: "Niche-Precision Design",
+    name: "Nail Niche-Precision Design",
     description:
-      "Design is your number 1 message! Visually match your niche without blending in, with clean layout and smart visual hierarchy that builds instant confidence.",
+      "Does your website align with the general look and feel of other sites in your niche BUT without blending in OR feeling out of place?",
     color: "bg-green-500",
     questions: [
       {
         id: "n1",
-        text: "Does the design visually match the niche without blending in?",
+        text: "Does your website align with the general look and feel of other sites in your niche BUT without blending in OR feeling out of place?",
         type: "multiple_choice",
-        points: 17,
+        points: 10,
         required: true,
+        config: {
+          options: [
+            { value: "yes", label: "Yes", points: 1.0 },
+            {
+              value: "needs_work",
+              label: "Needs Work",
+              points: 0.5,
+              subOptions: [
+                {
+                  value: "almost_there",
+                  label: "Almost There",
+                  color: "🔵",
+                  points: 0.7,
+                },
+                {
+                  value: "needs_bit_work",
+                  label: "Needs a Bit of Work",
+                  color: "🟡",
+                  points: 0.5,
+                },
+                {
+                  value: "moderate_rework",
+                  label: "Moderate Rework",
+                  color: "🟠",
+                  points: 0.4,
+                },
+                {
+                  value: "significant_fixes",
+                  label: "Significant Fixes",
+                  color: "🔴",
+                  points: 0.3,
+                },
+                {
+                  value: "complete_overhaul",
+                  label: "Complete Overhaul",
+                  color: "⚫",
+                  points: 0.2,
+                },
+              ],
+            },
+            { value: "no", label: "No", points: 0.0 },
+          ],
+        },
       },
       {
         id: "n2",
-        text: "Is there a clean layout with smart visual hierarchy?",
+        text: "Does the website's overall design and user experience feel clean, polished, uncluttered, and premium, boosting visitors' confidence in your brand?",
         type: "multiple_choice",
-        points: 17,
+        points: 10,
         required: true,
+        config: {
+          options: [
+            { value: "yes", label: "Yes", points: 1.0 },
+            {
+              value: "needs_work",
+              label: "Needs Work",
+              points: 0.5,
+              subOptions: [
+                {
+                  value: "almost_there",
+                  label: "Almost There",
+                  color: "🔵",
+                  points: 0.7,
+                },
+                {
+                  value: "needs_bit_work",
+                  label: "Needs a Bit of Work",
+                  color: "🟡",
+                  points: 0.5,
+                },
+                {
+                  value: "moderate_rework",
+                  label: "Moderate Rework",
+                  color: "🟠",
+                  points: 0.4,
+                },
+                {
+                  value: "significant_fixes",
+                  label: "Significant Fixes",
+                  color: "🔴",
+                  points: 0.3,
+                },
+                {
+                  value: "complete_overhaul",
+                  label: "Complete Overhaul",
+                  color: "⚫",
+                  points: 0.2,
+                },
+              ],
+            },
+            { value: "no", label: "No", points: 0.0 },
+          ],
+        },
       },
       {
         id: "n3",
-        text: "Is the design coherent and conversion-friendly?",
+        text: "Are you confident that each website element and section was intentionally & strategically positioned in the right order of appearance?",
         type: "multiple_choice",
-        points: 16,
+        points: 10,
         required: true,
+        config: {
+          options: [
+            { value: "yes", label: "Yes", points: 1.0 },
+            {
+              value: "needs_work",
+              label: "Needs Work",
+              points: 0.5,
+              subOptions: [
+                {
+                  value: "almost_there",
+                  label: "Almost There",
+                  color: "🔵",
+                  points: 0.7,
+                },
+                {
+                  value: "needs_bit_work",
+                  label: "Needs a Bit of Work",
+                  color: "🟡",
+                  points: 0.5,
+                },
+                {
+                  value: "moderate_rework",
+                  label: "Moderate Rework",
+                  color: "🟠",
+                  points: 0.4,
+                },
+                {
+                  value: "significant_fixes",
+                  label: "Significant Fixes",
+                  color: "🔴",
+                  points: 0.3,
+                },
+                {
+                  value: "complete_overhaul",
+                  label: "Complete Overhaul",
+                  color: "⚫",
+                  points: 0.2,
+                },
+              ],
+            },
+            { value: "no", label: "No", points: 0.0 },
+          ],
+        },
       },
       {
         id: "n4",
-        text: "Does it build instant confidence?",
+        text: "Do you often second guess the appropriateness of your design when compared to the top competitors in your niche?",
         type: "multiple_choice",
-        points: 17,
+        points: 10,
         required: true,
-      },
-      {
-        id: "n5",
-        text: "Does it look and feel like the expert the audience has been searching for?",
-        type: "multiple_choice",
-        points: 16,
-        required: true,
-      },
-      {
-        id: "n6",
-        text: "Does the site's vibe match the niche and positioning while feeling uniquely yours?",
-        type: "multiple_choice",
-        points: 17,
-        required: true,
-      },
-      {
-        id: "n7",
-        text: "Additional notes on niche-precision design:",
-        type: "text",
-        points: 0,
-        required: false,
+        config: {
+          options: [
+            { value: "never", label: "Never", points: 1.0 },
+            { value: "rarely", label: "Rarely", points: 0.75 },
+            { value: "sometimes", label: "Sometimes", points: 0.5 },
+            { value: "often", label: "Often", points: 0.0 },
+          ],
+        },
       },
     ],
   },
   {
     id: "E",
-    name: "Elegant Experience",
+    name: "Engineer Elegant Experience",
     description:
-      "Ensure your site loads fast, works everywhere, and feels like a smooth ride not a frustrating maze. Fast, responsive mobile-optimized experience that builds trust.",
+      "Does your site load fast (under 3 seconds) and provide a smooth frustration-free experience on phone and other devices?",
     color: "bg-purple-500",
     questions: [
       {
         id: "e1",
-        text: "Does the site load fast and work everywhere?",
+        text: "Does your site load fast (under 3 seconds) and provide a smooth frustration-free experience on phone and other devices?",
         type: "multiple_choice",
-        points: 15,
+        points: 10,
         required: true,
+        config: {
+          options: [
+            { value: "yes", label: "Yes", points: 1.0 },
+            {
+              value: "needs_work",
+              label: "Needs Work",
+              points: 0.5,
+              subOptions: [
+                {
+                  value: "almost_there",
+                  label: "Almost There",
+                  color: "🔵",
+                  points: 0.7,
+                },
+                {
+                  value: "needs_bit_work",
+                  label: "Needs a Bit of Work",
+                  color: "🟡",
+                  points: 0.5,
+                },
+                {
+                  value: "moderate_rework",
+                  label: "Moderate Rework",
+                  color: "🟠",
+                  points: 0.4,
+                },
+                {
+                  value: "significant_fixes",
+                  label: "Significant Fixes",
+                  color: "🔴",
+                  points: 0.3,
+                },
+                {
+                  value: "complete_overhaul",
+                  label: "Complete Overhaul",
+                  color: "⚫",
+                  points: 0.2,
+                },
+              ],
+            },
+            { value: "no", label: "No", points: 0.0 },
+          ],
+        },
       },
       {
         id: "e2",
-        text: "Does it feel like a smooth ride, not a frustrating maze?",
+        text: "Is your website easy to navigate so that visitors find what they need in just 1-2 clicks?",
         type: "multiple_choice",
-        points: 14,
+        points: 10,
         required: true,
-      },
-      {
-        id: "e3",
-        text: "Is it fast and responsive with mobile optimization?",
-        type: "multiple_choice",
-        points: 14,
-        required: true,
-      },
-      {
-        id: "e4",
-        text: "Does it build trust through a clean, premium feel?",
-        type: "multiple_choice",
-        points: 14,
-        required: true,
-      },
-      {
-        id: "e5",
-        text: "Do visitors stay longer and explore more?",
-        type: "multiple_choice",
-        points: 14,
-        required: true,
-      },
-      {
-        id: "e6",
-        text: "Can visitors take seamless action without friction?",
-        type: "multiple_choice",
-        points: 15,
-        required: true,
-      },
-      {
-        id: "e7",
-        text: "Is staying and buying effortless, not frustrating?",
-        type: "multiple_choice",
-        points: 14,
-        required: true,
-      },
-      {
-        id: "e8",
-        text: "Additional notes on elegant experience:",
-        type: "text",
-        points: 0,
-        required: false,
+        config: {
+          options: [
+            { value: "yes", label: "Yes", points: 1.0 },
+            {
+              value: "needs_work",
+              label: "Needs Work",
+              points: 0.5,
+              subOptions: [
+                {
+                  value: "almost_there",
+                  label: "Almost There",
+                  color: "🔵",
+                  points: 0.7,
+                },
+                {
+                  value: "needs_bit_work",
+                  label: "Needs a Bit of Work",
+                  color: "🟡",
+                  points: 0.5,
+                },
+                {
+                  value: "moderate_rework",
+                  label: "Moderate Rework",
+                  color: "🟠",
+                  points: 0.4,
+                },
+                {
+                  value: "significant_fixes",
+                  label: "Significant Fixes",
+                  color: "🔴",
+                  points: 0.3,
+                },
+                {
+                  value: "complete_overhaul",
+                  label: "Complete Overhaul",
+                  color: "⚫",
+                  points: 0.2,
+                },
+              ],
+            },
+            { value: "no", label: "No", points: 0.0 },
+          ],
+        },
       },
     ],
   },
   {
     id: "T",
-    name: "Targeted Dominance",
+    name: "Trigger Targeted Dominance",
     description:
-      "No more winking in the dark! Improve visibility in search, socials, and beyond. Build long-term discoverability and position yourself as the go-to, not just another option.",
+      "How often does your site show up in google, social media, and AI search?",
     color: "bg-orange-500",
     questions: [
       {
         id: "t1",
-        text: "Does the website improve visibility in search and socials?",
+        text: "How often does your site show up in google, social media, and AI search?",
         type: "multiple_choice",
-        points: 17,
+        points: 5,
         required: true,
+        config: {
+          options: [
+            { value: "frequently", label: "Frequently", points: 1.0 },
+            { value: "sometimes", label: "Sometimes", points: 0.75 },
+            { value: "rarely", label: "Rarely", points: 0.5 },
+            { value: "never", label: "Never", points: 0.0 },
+          ],
+        },
       },
       {
         id: "t2",
-        text: "Does it build long-term discoverability?",
+        text: "Has your website been crafted to position you as a trusted leader and the obvious choice in your industry?",
         type: "multiple_choice",
-        points: 17,
+        points: 5,
         required: true,
+        config: {
+          options: [
+            { value: "yes", label: "Yes", points: 1.0 },
+            {
+              value: "needs_work",
+              label: "Needs Work",
+              points: 0.5,
+              subOptions: [
+                {
+                  value: "almost_there",
+                  label: "Almost There",
+                  color: "🔵",
+                  points: 0.7,
+                },
+                {
+                  value: "needs_bit_work",
+                  label: "Needs a Bit of Work",
+                  color: "🟡",
+                  points: 0.5,
+                },
+                {
+                  value: "moderate_rework",
+                  label: "Moderate Rework",
+                  color: "🟠",
+                  points: 0.4,
+                },
+                {
+                  value: "significant_fixes",
+                  label: "Significant Fixes",
+                  color: "🔴",
+                  points: 0.3,
+                },
+                {
+                  value: "complete_overhaul",
+                  label: "Complete Overhaul",
+                  color: "⚫",
+                  points: 0.2,
+                },
+              ],
+            },
+            { value: "no", label: "No", points: 0.0 },
+          ],
+        },
       },
       {
         id: "t3",
-        text: "Is the brand positioned as the go-to, not just another option?",
+        text: "How confident are you that your website answers the top 10 questions potential clients often ask?",
         type: "multiple_choice",
-        points: 16,
+        points: 5,
         required: true,
+        config: {
+          options: [
+            { value: "very_confident", label: "Very Confident", points: 1.0 },
+            { value: "confident", label: "Confident", points: 0.75 },
+            {
+              value: "somewhat_confident",
+              label: "Somewhat Confident",
+              points: 0.5,
+            },
+            { value: "not_confident", label: "Not Confident", points: 0.0 },
+          ],
+        },
       },
       {
         id: "t4",
-        text: "Do dream clients actually find the website?",
+        text: "Do you have a clear marketing strategy that consistently drives potential clients to your site?",
         type: "multiple_choice",
-        points: 17,
+        points: 5,
         required: true,
+        config: {
+          options: [
+            { value: "yes", label: "Yes", points: 1.0 },
+            {
+              value: "needs_work",
+              label: "Needs Work",
+              points: 0.5,
+              subOptions: [
+                {
+                  value: "almost_there",
+                  label: "Almost There",
+                  color: "🔵",
+                  points: 0.7,
+                },
+                {
+                  value: "needs_bit_work",
+                  label: "Needs a Bit of Work",
+                  color: "🟡",
+                  points: 0.5,
+                },
+                {
+                  value: "moderate_rework",
+                  label: "Moderate Rework",
+                  color: "🟠",
+                  points: 0.4,
+                },
+                {
+                  value: "significant_fixes",
+                  label: "Significant Fixes",
+                  color: "🔴",
+                  points: 0.3,
+                },
+                {
+                  value: "complete_overhaul",
+                  label: "Complete Overhaul",
+                  color: "⚫",
+                  points: 0.2,
+                },
+              ],
+            },
+            { value: "no", label: "No", points: 0.0 },
+          ],
+        },
       },
       {
-        id: "t5",
-        text: "Is the site SEO-optimized and social-ready?",
-        type: "multiple_choice",
-        points: 16,
-        required: true,
-      },
-      {
-        id: "t6",
-        text: "Is it built to show up where the audience hangs out?",
-        type: "multiple_choice",
-        points: 17,
-        required: true,
-      },
-      {
-        id: "t7",
-        text: "Additional notes on targeted dominance:",
+        id: "t_extra_header",
+        text: "Extra",
         type: "text",
         points: 0,
         required: false,
+        config: {
+          text: {
+            placeholder: "--- Extra Questions (Do Not Impact Score) ---",
+            maxLength: 0,
+            multiline: false,
+          },
+        },
+      },
+      {
+        id: "t5",
+        text: "What is the current monthly revenue of your business?",
+        type: "multiple_choice",
+        points: 0,
+        required: false,
+        config: {
+          options: [
+            { value: "less_than_5k", label: "Less than $5K", points: 0 },
+            { value: "5k_9k", label: "$5K - $9K", points: 0 },
+            { value: "10k_29k", label: "$10K - $29K", points: 0 },
+            { value: "30k_50k", label: "$30K - $50K", points: 0 },
+            { value: "more_than_50k", label: "More than $50K", points: 0 },
+          ],
+        },
+      },
+      {
+        id: "t6",
+        text: "How much of that comes directly from your website?",
+        type: "multiple_choice",
+        points: 0,
+        required: false,
+        config: {
+          options: [
+            { value: "0_percent", label: "0%", points: 0 },
+            { value: "1_10_percent", label: "1 - 10%", points: 0 },
+            { value: "11_30_percent", label: "11 - 30%", points: 0 },
+            { value: "31_50_percent", label: "31 - 50%", points: 0 },
+            { value: "51_100_percent", label: "51 - 100%", points: 0 },
+          ],
+        },
       },
     ],
   },
@@ -556,7 +1443,43 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({
         return {
           options: [
             { value: "yes", label: "Yes", points: 1.0 },
-            { value: "needs_work", label: "Needs Work", points: 0.5 },
+            {
+              value: "needs_work",
+              label: "Needs Work",
+              points: 0.5,
+              subOptions: [
+                {
+                  value: "almost_there",
+                  label: "Almost There",
+                  color: "🔵",
+                  points: 0.7,
+                },
+                {
+                  value: "needs_bit_work",
+                  label: "Needs a Bit of Work",
+                  color: "🟡",
+                  points: 0.5,
+                },
+                {
+                  value: "moderate_rework",
+                  label: "Moderate Rework",
+                  color: "🟠",
+                  points: 0.4,
+                },
+                {
+                  value: "significant_fixes",
+                  label: "Significant Fixes",
+                  color: "🔴",
+                  points: 0.3,
+                },
+                {
+                  value: "complete_overhaul",
+                  label: "Complete Overhaul",
+                  color: "⚫",
+                  points: 0.2,
+                },
+              ],
+            },
             { value: "no", label: "No", points: 0.0 },
           ],
         };
@@ -653,14 +1576,35 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({
               question.type === "multiple_choice" &&
               question.config?.options
             ) {
-              // Use custom options for scoring
-              const selectedOption = question.config.options.find(
-                (opt) => opt.value === response.answer,
-              );
-              if (selectedOption && selectedOption.points !== undefined) {
-                questionScore = Math.floor(
-                  question.points * selectedOption.points,
+              // Check if it's a sub-option response (contains ":")
+              if (response.answer.includes(":")) {
+                const [mainValue, subValue] = response.answer.split(":");
+                const selectedOption = question.config.options.find(
+                  (opt) => opt.value === mainValue,
                 );
+                if (selectedOption?.subOptions) {
+                  const selectedSubOption = selectedOption.subOptions.find(
+                    (subOpt) => subOpt.value === subValue,
+                  );
+                  if (
+                    selectedSubOption &&
+                    selectedSubOption.points !== undefined
+                  ) {
+                    questionScore = Math.floor(
+                      question.points * selectedSubOption.points,
+                    );
+                  }
+                }
+              } else {
+                // Use custom options for scoring
+                const selectedOption = question.config.options.find(
+                  (opt) => opt.value === response.answer,
+                );
+                if (selectedOption && selectedOption.points !== undefined) {
+                  questionScore = Math.floor(
+                    question.points * selectedOption.points,
+                  );
+                }
               }
             } else if (question.type === "rating" && question.config?.rating) {
               // Calculate rating score

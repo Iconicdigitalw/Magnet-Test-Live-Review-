@@ -9,32 +9,20 @@ import {
   RefreshCw,
   Maximize2,
   Minimize2,
-  Pen,
   Camera,
   Video,
   Square,
   Circle,
-  Type,
-  ArrowUpRight,
-  Download,
   Play,
   Pause,
   StopCircle,
-  Zap,
+  Magnet,
   X,
   ZoomIn,
   ZoomOut,
   Home,
   FolderOpen,
   BarChart3,
-  MousePointer,
-  Pencil,
-  Highlighter,
-  Eraser,
-  Undo,
-  Redo,
-  Trash2,
-  Palette,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -44,7 +32,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Card } from "@/components/ui/card";
 import {
   Tooltip,
   TooltipContent,
@@ -56,7 +43,6 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import LiveAnnotationOverlay from "./LiveAnnotationOverlay";
 import MagnetReviewPanel from "./MagnetReviewPanel";
@@ -113,18 +99,6 @@ const deviceSizes = [
 
 const zoomLevels = [0.25, 0.5, 0.75, 1.0];
 
-// Predefined colors for annotation tools
-const ANNOTATION_COLORS = [
-  { name: "Red", value: "#ef4444" },
-  { name: "Orange", value: "#f97316" },
-  { name: "Yellow", value: "#eab308" },
-  { name: "Green", value: "#22c55e" },
-  { name: "Blue", value: "#3b82f6" },
-  { name: "Purple", value: "#a855f7" },
-  { name: "Pink", value: "#ec4899" },
-  { name: "Black", value: "#000000" },
-];
-
 const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
   url = "https://example.com",
   projectId = "project-1",
@@ -144,26 +118,22 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
     x: number;
     y: number;
   }>({ x: 0, y: 0 });
-  const [activeAnnotationTool, setActiveAnnotationTool] =
-    useState<string>("pen");
   const [isRecording, setIsRecording] = useState<boolean>(false);
-  const [annotationTool, setAnnotationTool] = useState<string>("#22c55e");
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(
     null,
   );
   const [isMagnetPanelOpen, setIsMagnetPanelOpen] = useState<boolean>(false);
   const [magnetActiveTab, setMagnetActiveTab] = useState<string>(currentTab);
   const [zoomLevel, setZoomLevel] = useState<number>(0.75);
-  const [isAnnotationMode, setIsAnnotationMode] = useState<boolean>(true);
-  const [annotations, setAnnotations] = useState<any>(null);
-  const [isAnnotationToolboxOpen, setIsAnnotationToolboxOpen] =
-    useState<boolean>(true);
-  const [useVirtualScroll, setUseVirtualScroll] = useState<boolean>(false);
+  const [isCapturing, setIsCapturing] = useState<boolean>(false);
+  const [captureProgress, setCaptureProgress] = useState<{
+    current: number;
+    total: number;
+    status: string;
+  }>({ current: 0, total: 0, status: "" });
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const persistTimerRef = useRef<number | null>(null);
-  const latestAnnotationsRef = useRef<any>(null);
 
   const currentDevice =
     deviceSizes.find((device) => device.id === selectedDevice) ||
@@ -242,118 +212,563 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
     }
   };
 
-  const handleZoomReset = () => setZoomLevel(1.0);
-
-  // Annotation tool handlers
-  const handleAnnotationTool = (tool: string) => {
-    setActiveAnnotationTool(tool);
-    setAnnotationTool(tool);
-    setIsAnnotationMode(true);
-
-    const toolMessages = {
-      select: "Select mode - you can interact with the website normally",
-      pen: "Pen tool - click and drag to draw on the website",
-      highlighter: "Highlighter tool - click and drag to highlight areas",
-      text: "Text tool - click anywhere to add text annotations",
-      arrow: "Arrow tool - click and drag to draw arrows",
-      rectangle: "Rectangle tool - click and drag to draw rectangles",
-      eraser: "Eraser tool - click on annotations to remove them",
-    } as const;
-
-    toast({
-      title: `${tool.charAt(0).toUpperCase() + tool.slice(1)} tool selected`,
-      description:
-        // @ts-ignore
-        toolMessages[tool] ||
-        `You can now use the ${tool} tool to annotate the website.`,
-      duration: 3000,
-    });
-  };
-
-  const toggleAnnotationMode = () => {
-    setIsAnnotationMode(!isAnnotationMode);
-    if (!isAnnotationMode) {
-      setIsAnnotationToolboxOpen(true);
-      toast({
-        title: "Annotation mode enabled",
-        description:
-          "You can now annotate the website. Use the tools panel on the left.",
-        duration: 3000,
-      });
-    }
-  };
-
-  const toggleAnnotationToolbox = () =>
-    setIsAnnotationToolboxOpen(!isAnnotationToolboxOpen);
-
-  const handleAnnotationChange = (newAnnotations: any) => {
-    latestAnnotationsRef.current = newAnnotations;
-    if (persistTimerRef.current) window.clearTimeout(persistTimerRef.current);
-    persistTimerRef.current = window.setTimeout(() => {
-      try {
-        const storageKey = `annotations-${projectId}-${reviewId}-${magnetActiveTab}`;
-        const payload = latestAnnotationsRef.current || newAnnotations;
-        localStorage.setItem(storageKey, JSON.stringify(payload));
-      } catch (error) {
-        console.error("Failed to save annotations:", error);
-      }
-    }, 250);
-  };
-
-  // Load saved annotations
-  useEffect(() => {
-    try {
-      const storageKey = `annotations-${projectId}-${reviewId}-${magnetActiveTab}`;
-      const savedAnnotations = localStorage.getItem(storageKey);
-      if (savedAnnotations) {
-        setAnnotations(JSON.parse(savedAnnotations));
-      }
-    } catch (error) {
-      console.error("Failed to load annotations:", error);
-    }
-  }, [projectId, reviewId, magnetActiveTab]);
-
-  // Screen capture handler (placeholder)
+  // Screen capture handler - captures the current browser tab
   const handleScreenCapture = async () => {
     try {
       toast({
-        title: "Capturing screenshot",
-        description: "Please wait while we capture the current view...",
-        duration: 2000,
+        title: "Requesting screen capture...",
+        description:
+          "Please select the current browser tab to capture the viewport.",
+        duration: 3000,
       });
-      if (iframeRef.current) {
-        const canvas = document.createElement("canvas");
-        const ctx = canvas.getContext("2d");
-        if (ctx) {
-          canvas.width = currentDevice.width;
-          canvas.height = currentDevice.height;
-          ctx.fillStyle = "#ffffff";
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-          ctx.font = "20px Arial";
-          ctx.fillStyle = "#000000";
-          ctx.fillText(`Screenshot of ${currentUrl}`, 20, 40);
-          ctx.fillText(`Captured at ${new Date().toLocaleString()}`, 20, 70);
-          const link = document.createElement("a");
-          link.download = `screenshot-${Date.now()}.png`;
-          link.href = canvas.toDataURL();
-          link.click();
-          toast({
-            title: "Screenshot captured",
-            description:
-              "The screenshot has been saved to your downloads folder.",
-            duration: 3000,
-          });
+
+      // Request screen capture with tab-only constraints
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: {
+          mediaSource: "browser", // Prefer browser tab over entire screen
+          width: { ideal: currentDevice.width },
+          height: { ideal: currentDevice.height },
+        },
+        audio: false, // No audio needed for screenshots
+        preferCurrentTab: true, // Chrome extension hint
+      } as any);
+
+      if (!stream) {
+        throw new Error("No screen capture stream available");
+      }
+
+      // Create video element to capture frame
+      const video = document.createElement("video");
+      video.srcObject = stream;
+      video.play();
+
+      // Wait for video to be ready
+      await new Promise((resolve) => {
+        video.onloadedmetadata = resolve;
+      });
+
+      // Create canvas and capture frame
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext("2d");
+
+      if (!ctx) {
+        throw new Error("Could not get canvas context");
+      }
+
+      ctx.drawImage(video, 0, 0);
+
+      // Stop the stream
+      stream.getTracks().forEach((track) => track.stop());
+
+      // Convert to blob and download
+      canvas.toBlob(
+        (blob) => {
+          if (blob) {
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+            const deviceName = currentDevice.name
+              .toLowerCase()
+              .replace(/\s+/g, "-");
+
+            link.download = `magnet-viewport-${deviceName}-${timestamp}.png`;
+            link.href = url;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
+            toast({
+              title: "Viewport captured!",
+              description: `Screenshot saved as ${link.download}`,
+              duration: 3000,
+            });
+          } else {
+            throw new Error("Failed to create image blob");
+          }
+        },
+        "image/png",
+        0.95,
+      );
+    } catch (error) {
+      console.error("Error capturing viewport:", error);
+
+      let errorTitle = "Viewport capture failed";
+      let errorMessage = "There was an error capturing the viewport.";
+      let suggestions = "";
+
+      if (error instanceof Error) {
+        if (error.name === "NotAllowedError") {
+          errorTitle = "Permission denied";
+          errorMessage = "Screen capture permission was denied.";
+          suggestions =
+            "Please allow screen capture and select the current browser tab.";
+        } else if (error.name === "NotSupportedError") {
+          errorTitle = "Not supported";
+          errorMessage = "Screen capture is not supported in this browser.";
+          suggestions =
+            "Please use Chrome, Firefox, or Edge for screen capture.";
+        } else {
+          errorMessage = "An unexpected error occurred during capture.";
+          suggestions = "Please try again or refresh the page.";
         }
       }
-    } catch (error) {
-      console.error("Error capturing screenshot:", error);
+
       toast({
-        title: "Screenshot failed",
+        title: errorTitle,
+        description: `${errorMessage} ${suggestions}`,
+        variant: "destructive",
+        duration: 5000,
+      });
+    }
+  };
+
+  // Area capture - captures a selected area with user interaction
+  const handleAreaCapture = async () => {
+    try {
+      toast({
+        title: "Area capture mode",
         description:
-          "There was an error capturing the screenshot. Please try again.",
+          "Click and drag to select an area, then capture it using screen capture.",
+        duration: 4000,
+      });
+
+      // Request screen capture for area selection
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: {
+          mediaSource: "browser",
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+        },
+        audio: false,
+        preferCurrentTab: true,
+      } as any);
+
+      if (!stream) {
+        throw new Error("No screen capture stream available");
+      }
+
+      // Create video element
+      const video = document.createElement("video");
+      video.srcObject = stream;
+      video.play();
+
+      // Wait for video to be ready
+      await new Promise((resolve) => {
+        video.onloadedmetadata = resolve;
+      });
+
+      // Create canvas for area capture
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext("2d");
+
+      if (!ctx) {
+        throw new Error("Could not get canvas context");
+      }
+
+      ctx.drawImage(video, 0, 0);
+
+      // Stop the stream
+      stream.getTracks().forEach((track) => track.stop());
+
+      // For now, capture the center area (can be enhanced with selection UI later)
+      const centerX = canvas.width * 0.25;
+      const centerY = canvas.height * 0.25;
+      const areaWidth = canvas.width * 0.5;
+      const areaHeight = canvas.height * 0.5;
+
+      // Create new canvas for the selected area
+      const areaCanvas = document.createElement("canvas");
+      areaCanvas.width = areaWidth;
+      areaCanvas.height = areaHeight;
+      const areaCtx = areaCanvas.getContext("2d");
+
+      if (!areaCtx) {
+        throw new Error("Could not get area canvas context");
+      }
+
+      areaCtx.drawImage(
+        canvas,
+        centerX,
+        centerY,
+        areaWidth,
+        areaHeight,
+        0,
+        0,
+        areaWidth,
+        areaHeight,
+      );
+
+      // Convert and download
+      areaCanvas.toBlob(
+        (blob) => {
+          if (blob) {
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+
+            link.download = `magnet-area-capture-${timestamp}.png`;
+            link.href = url;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
+            toast({
+              title: "Area captured!",
+              description: `Area screenshot saved as ${link.download}`,
+              duration: 3000,
+            });
+          }
+        },
+        "image/png",
+        0.95,
+      );
+    } catch (error) {
+      console.error("Error capturing area:", error);
+
+      let errorTitle = "Area capture failed";
+      let errorMessage = "There was an error capturing the selected area.";
+
+      if (error instanceof Error && error.name === "NotAllowedError") {
+        errorTitle = "Permission denied";
+        errorMessage = "Screen capture permission was denied.";
+      }
+
+      toast({
+        title: errorTitle,
+        description: errorMessage,
         variant: "destructive",
         duration: 3000,
       });
+    }
+  };
+
+  // Utility function to capture a single frame from screen capture
+  const captureFrame = async (
+    stream: MediaStream,
+  ): Promise<HTMLCanvasElement> => {
+    return new Promise((resolve, reject) => {
+      const video = document.createElement("video");
+      video.srcObject = stream;
+      video.muted = true;
+      video.playsInline = true;
+
+      video.onloadedmetadata = () => {
+        video.play();
+
+        // Wait a bit for the video to stabilize
+        setTimeout(() => {
+          try {
+            const canvas = document.createElement("canvas");
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext("2d");
+
+            if (!ctx) {
+              reject(new Error("Could not get canvas context"));
+              return;
+            }
+
+            ctx.drawImage(video, 0, 0);
+            resolve(canvas);
+          } catch (error) {
+            reject(error);
+          }
+        }, 200);
+      };
+
+      video.onerror = () => reject(new Error("Video loading failed"));
+    });
+  };
+
+  // Utility function to detect scroll height
+  const detectScrollHeight = (): number => {
+    const iframe = iframeRef.current;
+    if (!iframe) return currentDevice.height * 3;
+
+    try {
+      // Try to access iframe content (same-origin)
+      if (iframe.contentWindow && iframe.contentDocument) {
+        const doc = iframe.contentDocument;
+        const body = doc.body;
+        const html = doc.documentElement;
+
+        const scrollHeight = Math.max(
+          body?.scrollHeight || 0,
+          body?.offsetHeight || 0,
+          html?.clientHeight || 0,
+          html?.scrollHeight || 0,
+          html?.offsetHeight || 0,
+        );
+
+        return scrollHeight > 0 ? scrollHeight : currentDevice.height * 3;
+      }
+    } catch (error) {
+      // Cross-origin - estimate based on common patterns
+      console.log("Cross-origin detected, using intelligent estimation");
+    }
+
+    // Fallback estimation for cross-origin iframes
+    return currentDevice.height * 4; // Assume 4 screen heights for most websites
+  };
+
+  // Utility function to scroll iframe
+  const scrollIframe = async (scrollY: number): Promise<boolean> => {
+    const iframe = iframeRef.current;
+    if (!iframe) return false;
+
+    try {
+      if (iframe.contentWindow) {
+        iframe.contentWindow.scrollTo({
+          top: scrollY,
+          left: 0,
+          behavior: "auto", // Instant scroll for capture
+        });
+
+        // Wait for scroll to complete and content to render
+        await new Promise((resolve) => setTimeout(resolve, 800));
+        return true;
+      }
+    } catch (error) {
+      // Cross-origin scrolling not available
+      console.log("Direct iframe scrolling not available (cross-origin)");
+    }
+
+    return false;
+  };
+
+  // Utility function to stitch images with overlap detection
+  const stitchImages = (
+    canvases: HTMLCanvasElement[],
+    scrollStep: number,
+  ): HTMLCanvasElement => {
+    if (canvases.length === 0) {
+      throw new Error("No images to stitch");
+    }
+
+    if (canvases.length === 1) {
+      return canvases[0];
+    }
+
+    const firstCanvas = canvases[0];
+    const totalHeight = (canvases.length - 1) * scrollStep + firstCanvas.height;
+
+    const stitchedCanvas = document.createElement("canvas");
+    stitchedCanvas.width = firstCanvas.width;
+    stitchedCanvas.height = totalHeight;
+
+    const ctx = stitchedCanvas.getContext("2d");
+    if (!ctx) {
+      throw new Error("Could not get stitching canvas context");
+    }
+
+    // Draw each canvas at the appropriate position
+    canvases.forEach((canvas, index) => {
+      const yPosition = index * scrollStep;
+      ctx.drawImage(canvas, 0, yPosition);
+    });
+
+    return stitchedCanvas;
+  };
+
+  // Enhanced full page capture with single permission request
+  const handleElementCapture = async () => {
+    if (isCapturing) {
+      toast({
+        title: "Capture in progress",
+        description: "Please wait for the current capture to complete.",
+        duration: 2000,
+      });
+      return;
+    }
+
+    setIsCapturing(true);
+    setCaptureProgress({ current: 0, total: 0, status: "Initializing..." });
+
+    let captureStream: MediaStream | null = null;
+
+    try {
+      // Step 1: Request permission and get initial measurements
+      toast({
+        title: "Starting full page capture",
+        description: "Please grant screen capture permission to continue.",
+        duration: 3000,
+      });
+
+      captureStream = await navigator.mediaDevices.getDisplayMedia({
+        video: {
+          mediaSource: "browser",
+          width: { ideal: currentDevice.width * 2 }, // Higher resolution for better quality
+          height: { ideal: currentDevice.height * 2 },
+          frameRate: { ideal: 1, max: 5 }, // Low frame rate for screenshots
+        },
+        audio: false,
+        preferCurrentTab: true,
+      } as any);
+
+      if (!captureStream) {
+        throw new Error("Screen capture permission denied");
+      }
+
+      setCaptureProgress({ current: 1, total: 5, status: "Analyzing page..." });
+
+      // Step 2: Detect page dimensions
+      const totalHeight = detectScrollHeight();
+      const viewportHeight = currentDevice.height;
+      const scrollStep = Math.floor(viewportHeight * 0.7); // 30% overlap for better stitching
+      const totalSections = Math.ceil(totalHeight / scrollStep);
+      const maxSections = Math.min(totalSections, 15); // Limit to prevent excessive captures
+
+      console.log(
+        `Full page capture: ${totalHeight}px height, ${maxSections} sections`,
+      );
+
+      setCaptureProgress({
+        current: 2,
+        total: maxSections + 3,
+        status: `Capturing ${maxSections} sections...`,
+      });
+
+      toast({
+        title: "Capturing page sections",
+        description: `Auto-scrolling through ${maxSections} sections. Please keep this tab active.`,
+        duration: 4000,
+      });
+
+      // Step 3: Capture all sections
+      const screenshots: HTMLCanvasElement[] = [];
+      let currentScrollY = 0;
+
+      for (let i = 0; i < maxSections; i++) {
+        setCaptureProgress({
+          current: i + 3,
+          total: maxSections + 3,
+          status: `Capturing section ${i + 1} of ${maxSections}...`,
+        });
+
+        // Scroll to position (if possible)
+        const scrollSuccess = await scrollIframe(currentScrollY);
+
+        if (!scrollSuccess && i > 0) {
+          // If we can't scroll, we might be dealing with a cross-origin iframe
+          // In this case, we'll capture what we can see and inform the user
+          console.log("Cannot scroll iframe, capturing visible area only");
+          break;
+        }
+
+        // Capture current view
+        try {
+          const canvas = await captureFrame(captureStream);
+          screenshots.push(canvas);
+
+          // Move to next scroll position
+          currentScrollY += scrollStep;
+
+          // Stop if we've scrolled past the estimated height
+          if (currentScrollY >= totalHeight) {
+            break;
+          }
+        } catch (error) {
+          console.error(`Failed to capture section ${i + 1}:`, error);
+          // Continue with next section
+        }
+
+        // Small delay between captures for stability
+        await new Promise((resolve) => setTimeout(resolve, 300));
+      }
+
+      // Step 4: Reset scroll position
+      setCaptureProgress({
+        current: maxSections + 3,
+        total: maxSections + 3,
+        status: "Processing images...",
+      });
+
+      await scrollIframe(0); // Reset to top
+
+      if (screenshots.length === 0) {
+        throw new Error("No screenshots were captured successfully");
+      }
+
+      // Step 5: Stitch and save
+      const finalCanvas = stitchImages(screenshots, scrollStep);
+
+      finalCanvas.toBlob(
+        (blob) => {
+          if (blob) {
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+            const deviceName = currentDevice.name
+              .toLowerCase()
+              .replace(/\s+/g, "-");
+
+            link.download = `magnet-fullpage-${deviceName}-${timestamp}.png`;
+            link.href = url;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
+            toast({
+              title: "Full page captured successfully!",
+              description: `${screenshots.length} sections stitched into ${link.download}`,
+              duration: 5000,
+            });
+          } else {
+            throw new Error("Failed to create final image");
+          }
+        },
+        "image/png",
+        0.92, // Slightly lower quality for smaller file size
+      );
+    } catch (error) {
+      console.error("Full page capture error:", error);
+
+      let errorTitle = "Full page capture failed";
+      let errorMessage = "An error occurred during capture.";
+      let suggestions = "";
+
+      if (error instanceof Error) {
+        if (error.name === "NotAllowedError") {
+          errorTitle = "Permission denied";
+          errorMessage = "Screen capture permission was denied.";
+          suggestions =
+            "Please allow screen capture and select this browser tab.";
+        } else if (error.name === "NotSupportedError") {
+          errorTitle = "Not supported";
+          errorMessage = "Screen capture is not supported in this browser.";
+          suggestions =
+            "Please use Chrome, Firefox, or Edge for full page capture.";
+        } else if (error.message.includes("No screenshots")) {
+          errorTitle = "Capture failed";
+          errorMessage = "Unable to capture any page sections.";
+          suggestions =
+            "The website may be blocking capture or the page failed to load.";
+        } else {
+          errorMessage = error.message || "An unexpected error occurred.";
+          suggestions = "Please try again or use viewport capture instead.";
+        }
+      }
+
+      toast({
+        title: errorTitle,
+        description: `${errorMessage} ${suggestions}`,
+        variant: "destructive",
+        duration: 6000,
+      });
+    } finally {
+      // Clean up
+      if (captureStream) {
+        captureStream.getTracks().forEach((track) => track.stop());
+      }
+      setIsCapturing(false);
+      setCaptureProgress({ current: 0, total: 0, status: "" });
     }
   };
 
@@ -468,7 +883,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
     }
   };
 
-  // Enhanced iframe scroll events with cross-origin fallback
+  // Iframe scroll events
   useEffect(() => {
     let scrollListener: (() => void) | null = null;
     let rafId: number | null = null;
@@ -487,7 +902,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
           scheduleUpdate(scrollX, scrollY);
         }
       } catch (error) {
-        // If we cannot read scroll, we rely on virtual scroll (wheel capture from overlay)
+        // Cross-origin restrictions
       }
     };
 
@@ -502,25 +917,24 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
           iframeRef.current.contentWindow.addEventListener(
             "scroll",
             handleIframeScroll,
-            { passive: true },
+            { passive: true, capture: false },
           );
           scrollListener = handleIframeScroll;
-          setUseVirtualScroll(false);
           handleIframeScroll();
         }
       } catch (error) {
-        // Cross-origin: enable virtual scroll mode
-        setUseVirtualScroll(true);
+        // Cross-origin: scroll tracking not available
+        console.info("Cross-origin detected, scroll tracking limited");
       }
     };
 
     const timeoutId = setTimeout(setupScrollTracking, 500);
 
     const handleResize = () => {
-      if (!useVirtualScroll) handleIframeScroll();
+      handleIframeScroll();
     };
 
-    window.addEventListener("resize", handleResize);
+    window.addEventListener("resize", handleResize, { passive: true });
 
     return () => {
       clearTimeout(timeoutId);
@@ -539,16 +953,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
       window.removeEventListener("resize", handleResize);
       if (rafId) cancelAnimationFrame(rafId);
     };
-  }, [currentUrl, isLoading, useVirtualScroll]);
-
-  // Receive scroll deltas from overlay in virtual mode
-  const handleOverlayScrollDelta = (dx: number, dy: number) => {
-    if (!useVirtualScroll) return;
-    setScrollPosition((prev) => ({
-      x: Math.max(0, prev.x + dx),
-      y: Math.max(0, prev.y + dy),
-    }));
-  };
+  }, [currentUrl, isLoading]);
 
   const getTabColor = (tabId: string) => {
     const colors: Record<string, string> = {
@@ -570,7 +975,9 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
       {/* Top Bar */}
       <div className="flex items-center gap-2 p-2 border-b bg-background">
         <div className="flex items-center gap-1">
-          <h1 className="text-lg font-bold mr-3">MAGNET Review</h1>
+          <h1 className="text-lg font-bold mr-3">
+            MAGNET Test<sup className="text-xs">TM</sup> Live
+          </h1>
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -703,7 +1110,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
           <div className="w-px h-6 bg-border mx-1" />
         </div>
 
-        {/* Annotation & Review Tools */}
+        {/* Review Tools */}
         <div className="flex items-center">
           <TooltipProvider>
             <Tooltip>
@@ -713,7 +1120,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
                   size="sm"
                   onClick={toggleMagnetPanel}
                 >
-                  <Zap className="h-4 w-4" />
+                  <Magnet className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
@@ -723,54 +1130,6 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
-
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant={isAnnotationMode ? "default" : "ghost"}
-                  size="sm"
-                  onClick={toggleAnnotationMode}
-                  className={
-                    isAnnotationMode ? "bg-primary text-primary-foreground" : ""
-                  }
-                >
-                  <Pen className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                {isAnnotationMode
-                  ? "Disable Annotations"
-                  : "Enable Annotations"}
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-
-          {isAnnotationMode && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant={isAnnotationToolboxOpen ? "default" : "ghost"}
-                    size="sm"
-                    onClick={toggleAnnotationToolbox}
-                    className={
-                      isAnnotationToolboxOpen
-                        ? "bg-primary text-primary-foreground"
-                        : ""
-                    }
-                  >
-                    <Palette className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {isAnnotationToolboxOpen
-                    ? "Hide Annotation Tools"
-                    : "Show Annotation Tools"}
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
 
           {/* Screen Capture */}
           <DropdownMenu>
@@ -782,33 +1141,20 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
             <DropdownMenuContent align="center">
               <DropdownMenuItem onClick={handleScreenCapture}>
                 <Camera className="h-4 w-4 mr-2" />
-                Capture Screenshot
+                Capture Viewport
               </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() =>
-                  toast({
-                    title: "Coming soon",
-                    description:
-                      "Area capture will be available in a future update.",
-                    duration: 3000,
-                  })
-                }
-              >
+              <DropdownMenuItem onClick={handleAreaCapture}>
                 <Square className="h-4 w-4 mr-2" />
                 Capture Area
               </DropdownMenuItem>
               <DropdownMenuItem
-                onClick={() =>
-                  toast({
-                    title: "Coming soon",
-                    description:
-                      "Element capture will be available in a future update.",
-                    duration: 3000,
-                  })
-                }
+                onClick={handleElementCapture}
+                disabled={isCapturing}
               >
-                <Circle className="h-4 w-4 mr-2" />
-                Capture Element
+                <Circle
+                  className={`h-4 w-4 mr-2 ${isCapturing ? "animate-spin" : ""}`}
+                />
+                {isCapturing ? "Capturing..." : "Capture Full Page"}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -918,6 +1264,47 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
               </div>
             )}
 
+            {/* Full Page Capture Progress Overlay */}
+            {isCapturing && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/60 z-20">
+                <div className="bg-background rounded-lg p-6 shadow-2xl max-w-sm w-full mx-4">
+                  <div className="text-center space-y-4">
+                    <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary mx-auto"></div>
+                    <div>
+                      <h3 className="font-semibold text-lg mb-2">
+                        Capturing Full Page
+                      </h3>
+                      <p className="text-sm text-muted-foreground mb-3">
+                        {captureProgress.status}
+                      </p>
+                      {captureProgress.total > 0 && (
+                        <div className="space-y-2">
+                          <div className="flex justify-between text-xs text-muted-foreground">
+                            <span>Progress</span>
+                            <span>
+                              {captureProgress.current} /{" "}
+                              {captureProgress.total}
+                            </span>
+                          </div>
+                          <div className="w-full bg-secondary rounded-full h-2">
+                            <div
+                              className="bg-primary h-2 rounded-full transition-all duration-300"
+                              style={{
+                                width: `${Math.min((captureProgress.current / captureProgress.total) * 100, 100)}%`,
+                              }}
+                            ></div>
+                          </div>
+                        </div>
+                      )}
+                      <p className="text-xs text-muted-foreground mt-3">
+                        Please keep this tab active during capture
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Website iframe */}
             <iframe
               ref={iframeRef}
@@ -939,7 +1326,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
               }}
             />
 
-            {/* Annotation overlay */}
+            {/* Placeholder for future annotation overlay */}
             <LiveAnnotationOverlay
               reviewId={reviewId}
               tabId={magnetActiveTab}
@@ -949,16 +1336,8 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
               scrollTop={scrollPosition.y}
               scrollLeft={scrollPosition.x}
               zoomLevel={isFullscreen ? 1.0 : zoomLevel}
-              isVisible={isAnnotationMode}
+              isVisible={false}
               iframeRef={iframeRef}
-              onAnnotationChange={handleAnnotationChange}
-              activeTool={activeAnnotationTool}
-              selectedColor={annotationTool}
-              onToolChange={(tool) => setActiveAnnotationTool(tool)}
-              onColorChange={(color) => setAnnotationTool(color)}
-              initialAnnotations={annotations}
-              onScrollDelta={handleOverlayScrollDelta}
-              useVirtualScroll={useVirtualScroll}
             />
           </div>
         </div>
@@ -973,7 +1352,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
             <div className="absolute left-4 top-4 bottom-4 w-[380px] z-50 animate-in slide-in-from-left-4 duration-300">
               <div className="bg-background border rounded-lg shadow-2xl h-full flex flex-col">
                 <div className="flex items-center justify-between p-4 border-b">
-                  <h2 className="text-lg font-semibold">MAGNET Review</h2>
+                  <h2 className="text-lg font-semibold">What's your MAGNET?</h2>
                   <Button
                     variant="ghost"
                     size="sm"
@@ -1011,199 +1390,6 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
               </div>
             </div>
           </>
-        )}
-
-        {/* Floating Annotation Toolbox */}
-        {isAnnotationMode && isAnnotationToolboxOpen && (
-          <div
-            className={`absolute ${isMagnetPanelOpen ? "left-[400px]" : "left-4"} top-1/2 transform -translate-y-1/2 z-50 animate-in slide-in-from-left-4 duration-300`}
-          >
-            <div className="bg-background/95 backdrop-blur-sm border rounded-lg shadow-2xl p-3 w-[70px]">
-              <div className="text-xs font-medium text-muted-foreground mb-2 text-center">
-                Tools
-              </div>
-              <TooltipProvider>
-                <div className="flex flex-col gap-2 mb-3">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant={
-                          activeAnnotationTool === "select"
-                            ? "default"
-                            : "outline"
-                        }
-                        size="sm"
-                        onClick={() => setActiveAnnotationTool("select")}
-                        className="h-8 w-full"
-                      >
-                        <MousePointer className="h-4 w-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="right">
-                      <p>Select</p>
-                    </TooltipContent>
-                  </Tooltip>
-
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant={
-                          activeAnnotationTool === "pen" ? "default" : "outline"
-                        }
-                        size="sm"
-                        onClick={() => setActiveAnnotationTool("pen")}
-                        className="h-8 w-full"
-                        style={
-                          activeAnnotationTool === "pen"
-                            ? {
-                                backgroundColor: annotationTool,
-                                color: "white",
-                              }
-                            : {}
-                        }
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="right">
-                      <p>Pen</p>
-                    </TooltipContent>
-                  </Tooltip>
-
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant={
-                          activeAnnotationTool === "highlighter"
-                            ? "default"
-                            : "outline"
-                        }
-                        size="sm"
-                        onClick={() => setActiveAnnotationTool("highlighter")}
-                        className="h-8 w-full"
-                        style={
-                          activeAnnotationTool === "highlighter"
-                            ? {
-                                backgroundColor: annotationTool + "50",
-                                color: annotationTool,
-                              }
-                            : {}
-                        }
-                      >
-                        <Highlighter className="h-4 w-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="right">
-                      <p>Highlighter</p>
-                    </TooltipContent>
-                  </Tooltip>
-
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant={
-                          activeAnnotationTool === "text"
-                            ? "default"
-                            : "outline"
-                        }
-                        size="sm"
-                        onClick={() => setActiveAnnotationTool("text")}
-                        className="h-8 w-full"
-                      >
-                        <Type className="h-4 w-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="right">
-                      <p>Text</p>
-                    </TooltipContent>
-                  </Tooltip>
-
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant={
-                          activeAnnotationTool === "arrow"
-                            ? "default"
-                            : "outline"
-                        }
-                        size="sm"
-                        onClick={() => setActiveAnnotationTool("arrow")}
-                        className="h-8 w-full"
-                      >
-                        <ArrowRight className="h-4 w-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="right">
-                      <p>Arrow</p>
-                    </TooltipContent>
-                  </Tooltip>
-
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant={
-                          activeAnnotationTool === "rectangle"
-                            ? "default"
-                            : "outline"
-                        }
-                        size="sm"
-                        onClick={() => setActiveAnnotationTool("rectangle")}
-                        className="h-8 w-full"
-                      >
-                        <Square className="h-4 w-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="right">
-                      <p>Rectangle</p>
-                    </TooltipContent>
-                  </Tooltip>
-
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant={
-                          activeAnnotationTool === "eraser"
-                            ? "default"
-                            : "outline"
-                        }
-                        size="sm"
-                        onClick={() => setActiveAnnotationTool("eraser")}
-                        className="h-8 w-full"
-                      >
-                        <Eraser className="h-4 w-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="right">
-                      <p>Eraser</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
-
-                {/* Color Selection - Vertical */}
-                <div className="mb-3">
-                  <div className="text-xs font-medium text-muted-foreground mb-2 text-center">
-                    Colors
-                  </div>
-                  <div className="flex flex-col gap-2 items-center">
-                    {ANNOTATION_COLORS.map((color) => (
-                      <Tooltip key={color.value}>
-                        <TooltipTrigger asChild>
-                          <button
-                            onClick={() => setAnnotationTool(color.value)}
-                            className={`w-8 h-8 rounded-full border-2 transition-all hover:scale-110 ${annotationTool === color.value ? "border-foreground shadow-md" : "border-border"}`}
-                            style={{ backgroundColor: color.value }}
-                          />
-                        </TooltipTrigger>
-                        <TooltipContent side="right">
-                          <p>{color.name}</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    ))}
-                  </div>
-                </div>
-              </TooltipProvider>
-            </div>
-          </div>
         )}
       </div>
     </div>
