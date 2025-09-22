@@ -1313,6 +1313,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
             {/* Website iframe */}
             <iframe
               ref={iframeRef}
+              key={`iframe-${currentUrl}`}
               src={currentUrl}
               onLoad={handleIframeLoad}
               className="w-full h-full border-0 border-transparent border-none"
@@ -1333,6 +1334,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
 
             {/* Placeholder for future annotation overlay */}
             <LiveAnnotationOverlay
+              key={`overlay-${magnetActiveTab}`}
               reviewId={reviewId}
               tabId={magnetActiveTab}
               tabColor={getTabColor(magnetActiveTab)}
@@ -1379,7 +1381,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
                 <>
                   <div className="flex items-center p-4 border-b justify-center h-0.5">
                     <h2 className="text-lg font-semibold leading-tight">
-                      What's your MAGNET?
+                      What’s your MAGNET?
                     </h2>
                     <Button
                       variant="ghost"
