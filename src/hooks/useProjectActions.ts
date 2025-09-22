@@ -111,6 +111,25 @@ export const useProjectActions = () => {
     ) {
       console.log(`Deleting project: ${project.id}`);
 
+      // Remove from localStorage
+      try {
+        const existingProjects = JSON.parse(
+          localStorage.getItem("magnet-projects") || "[]",
+        );
+        const updatedProjects = existingProjects.filter(
+          (p: Project) => p.id !== project.id,
+        );
+        localStorage.setItem(
+          "magnet-projects",
+          JSON.stringify(updatedProjects),
+        );
+      } catch (storageError) {
+        console.error(
+          "Error removing project from localStorage:",
+          storageError,
+        );
+      }
+
       // Call the callback to remove the project from the UI
       if (onProjectDeleted) {
         onProjectDeleted(project.id);
@@ -120,7 +139,6 @@ export const useProjectActions = () => {
         title: "Project deleted",
         description: `"${project.name}" has been deleted successfully.`,
       });
-      // In a real app, this would make an API call to delete the project
     }
   };
 
@@ -143,6 +161,20 @@ export const useProjectActions = () => {
         lastUpdated: new Date().toISOString().split("T")[0],
         progress: 0,
       };
+
+      // Save to localStorage immediately
+      try {
+        const existingProjects = JSON.parse(
+          localStorage.getItem("magnet-projects") || "[]",
+        );
+        const updatedProjects = [newProject, ...existingProjects];
+        localStorage.setItem(
+          "magnet-projects",
+          JSON.stringify(updatedProjects),
+        );
+      } catch (storageError) {
+        console.error("Error saving project to localStorage:", storageError);
+      }
 
       // Call the callback to add the project to the state
       onProjectCreated(newProject);

@@ -86,6 +86,11 @@ interface SettingsContextType {
   saveReviewScore: (score: ReviewScore) => void;
   getReviewScores: (projectId?: string) => ReviewScore[];
   getAverageScores: () => Record<string, number>;
+  // Enhanced persistence utilities
+  forceImmediateSave: (categories: MagnetCategory[]) => Promise<boolean>;
+  saveStatus: "idle" | "saving" | "saved" | "error";
+  isLoading: boolean;
+  settingsVersion: number;
 }
 
 export const SettingsContext = createContext<SettingsContextType | undefined>(
@@ -1352,46 +1357,96 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({
   const [magnetCategories, setMagnetCategories] = useState<MagnetCategory[]>(
     defaultMagnetCategories,
   );
+  const [settingsVersion, setSettingsVersion] = useState<number>(Date.now());
+  const [isLoading, setIsLoading] = useState(true);
+  const [saveStatus, setSaveStatus] = useState<
+    "idle" | "saving" | "saved" | "error"
+  >("idle");
 
-  // Load settings from localStorage on mount
-  useEffect(() => {
+  // Simplified save function
+  const saveSettingsToStorage = (categories: MagnetCategory[]): boolean => {
+    try {
+      const settingsData = {
+        categories,
+        version: Date.now(),
+        timestamp: new Date().toISOString(),
+      };
+
+      localStorage.setItem("magnet-settings", JSON.stringify(settingsData));
+      setSaveStatus("saved");
+      setSettingsVersion(settingsData.version);
+      return true;
+    } catch (error) {
+      console.error("Error saving settings:", error);
+      setSaveStatus("error");
+      return false;
+    }
+  };
+
+  // Simplified load function
+  const loadSettingsFromStorage = (): MagnetCategory[] => {
     try {
       const savedSettings = localStorage.getItem("magnet-settings");
       if (savedSettings) {
         const parsed = JSON.parse(savedSettings);
-        setMagnetCategories(parsed);
+
+        // Handle new format with version
+        if (parsed.categories && Array.isArray(parsed.categories)) {
+          setSettingsVersion(parsed.version || Date.now());
+          return parsed.categories;
+        }
+
+        // Handle legacy format
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
       }
+
+      return defaultMagnetCategories;
     } catch (error) {
       console.error("Error loading settings:", error);
+      return defaultMagnetCategories;
     }
+  };
+
+  // Load settings from localStorage on mount
+  useEffect(() => {
+    setIsLoading(true);
+    const loadedCategories = loadSettingsFromStorage();
+    setMagnetCategories(loadedCategories);
+    setIsLoading(false);
   }, []);
 
   // Save settings to localStorage whenever they change
   useEffect(() => {
-    try {
-      localStorage.setItem("magnet-settings", JSON.stringify(magnetCategories));
-    } catch (error) {
-      console.error("Error saving settings:", error);
-    }
-  }, [magnetCategories]);
+    if (isLoading) return; // Don't save during initial load
 
-  // Sync settings across tabs/iframes
-  useEffect(() => {
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === "magnet-settings" && e.newValue) {
-        try {
-          const parsed = JSON.parse(e.newValue);
-          setMagnetCategories(parsed);
-        } catch (err) {
-          console.error("Error parsing settings from storage event:", err);
-        }
-      }
-    };
-    window.addEventListener("storage", onStorage);
-    return () => {
-      window.removeEventListener("storage", onStorage);
-    };
-  }, []);
+    setSaveStatus("saving");
+    const timeoutId = setTimeout(() => {
+      saveSettingsToStorage(magnetCategories);
+    }, 300); // Debounce saves
+
+    return () => clearTimeout(timeoutId);
+  }, [magnetCategories, isLoading]);
+
+  // Force immediate save function for critical operations
+  const forceImmediateSave = (
+    categories: MagnetCategory[],
+  ): Promise<boolean> => {
+    return new Promise((resolve) => {
+      const success = saveSettingsToStorage(categories);
+      // Additional verification
+      setTimeout(() => {
+        const verification = loadSettingsFromStorage();
+        const isVerified =
+          JSON.stringify(verification) === JSON.stringify(categories);
+        console.log(
+          isVerified ? "✅ Save verified" : "❌ Save verification failed",
+        );
+        resolve(isVerified);
+      }, 50);
+    });
+  };
 
   const updateCategory = (
     categoryId: string,
@@ -1546,6 +1601,11 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({
 
   const resetToDefaults = () => {
     setMagnetCategories(defaultMagnetCategories);
+    try {
+      localStorage.removeItem("magnet-settings");
+    } catch (error) {
+      console.error("Error clearing settings from localStorage:", error);
+    }
   };
 
   // Scoring functions
@@ -1730,6 +1790,11 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({
     saveReviewScore,
     getReviewScores,
     getAverageScores,
+    // Expose additional utilities
+    forceImmediateSave,
+    saveStatus,
+    isLoading,
+    settingsVersion,
   };
 
   return (

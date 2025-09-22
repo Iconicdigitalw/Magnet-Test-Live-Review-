@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
@@ -25,6 +25,7 @@ import {
   mockActivities,
   type Project,
 } from "@/data/mockData";
+import { useSettings } from "@/contexts/SettingsContext";
 
 const Home = () => {
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -34,9 +35,32 @@ const Home = () => {
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [previewProject, setPreviewProject] = useState<Project | null>(null);
   const [shareProject, setShareProject] = useState<Project | null>(null);
-  const [projects, setProjects] = useState<Project[]>(initialProjects);
+
+  // Settings management
+  const { magnetCategories, isLoading: settingsLoading } = useSettings();
+  // Load projects from localStorage or use initial projects
+  const [projects, setProjects] = useState<Project[]>(() => {
+    try {
+      const savedProjects = localStorage.getItem("magnet-projects");
+      if (savedProjects) {
+        return JSON.parse(savedProjects);
+      }
+    } catch (error) {
+      console.error("Error loading projects from localStorage:", error);
+    }
+    return initialProjects;
+  });
 
   const projectActions = useProjectActions();
+
+  // Save projects to localStorage whenever projects change
+  React.useEffect(() => {
+    try {
+      localStorage.setItem("magnet-projects", JSON.stringify(projects));
+    } catch (error) {
+      console.error("Error saving projects to localStorage:", error);
+    }
+  }, [projects]);
 
   // Function to handle project deletion
   const handleDeleteProject = (project: Project) => {

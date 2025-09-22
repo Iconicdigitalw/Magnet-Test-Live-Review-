@@ -672,6 +672,9 @@ const AdminSettings: React.FC = () => {
     resetToDefaults,
     getAverageScores,
     getReviewScores,
+    forceImmediateSave,
+    saveStatus,
+    isLoading,
   } = settingsContext;
 
   const [activeCategory, setActiveCategory] = useState<string>("M");
@@ -823,6 +826,7 @@ const AdminSettings: React.FC = () => {
   );
 
   const handleBackToApp = () => {
+    // Simple navigation back to home
     window.location.href = "/";
   };
 
@@ -881,6 +885,27 @@ const AdminSettings: React.FC = () => {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            {/* Save Status Indicator */}
+            <div className="flex items-center gap-2 text-sm">
+              {saveStatus === "saving" && (
+                <div className="flex items-center gap-1 text-yellow-600">
+                  <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></div>
+                  Saving...
+                </div>
+              )}
+              {saveStatus === "saved" && (
+                <div className="flex items-center gap-1 text-green-600">
+                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                  Saved
+                </div>
+              )}
+              {saveStatus === "error" && (
+                <div className="flex items-center gap-1 text-red-600">
+                  <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                  Save Error
+                </div>
+              )}
+            </div>
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button variant="outline">

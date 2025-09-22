@@ -23,6 +23,8 @@ import {
   Clock,
   Eye,
   EyeOff,
+  ChevronUp,
+  ChevronDown,
 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import {
@@ -59,6 +61,8 @@ interface MagnetReviewPanelProps {
   onSubmit?: (
     responses: Record<string, { answer: string; notes: string }>,
   ) => void;
+  isMinimized?: boolean;
+  onMinimizeToggle?: () => void;
 }
 
 // Inner panel that assumes SettingsContext is available
@@ -69,6 +73,8 @@ const MagnetReviewPanelInner: React.FC<MagnetReviewPanelProps> = ({
   onTabChange = () => {},
   onResponseSave = () => {},
   onSubmit = () => {},
+  isMinimized = false,
+  onMinimizeToggle = () => {},
 }) => {
   // Use dynamic settings from context
   const { magnetCategories: magnetTabs } = useSettings();
@@ -275,14 +281,25 @@ const MagnetReviewPanelInner: React.FC<MagnetReviewPanelProps> = ({
     };
   }, []);
 
-  // Update current visible tab when activeTab prop changes or magnetTabs change
+  // Update current visible tab when activeTab prop changes or magnetTabs change.
+  // Also scroll to the section when expanding from minimized state or when activeTab updates externally.
   useEffect(() => {
     if (magnetTabs.length > 0) {
       // If activeTab exists in magnetTabs, use it; otherwise use first tab
       const tabExists = magnetTabs.some((tab) => tab.id === activeTab);
-      setCurrentVisibleTab(tabExists ? activeTab : magnetTabs[0].id);
+      const targetTab = tabExists ? activeTab : magnetTabs[0].id;
+      setCurrentVisibleTab(targetTab);
+
+      // If panel is not minimized, ensure we scroll the content to the selected section
+      if (!isMinimized) {
+        // Delay to ensure sections are mounted and refs are set
+        const t = setTimeout(() => {
+          scrollToSection(targetTab);
+        }, 50);
+        return () => clearTimeout(t);
+      }
     }
-  }, [activeTab, magnetTabs]);
+  }, [activeTab, magnetTabs, isMinimized]);
 
   // Scroll to section when tab is clicked
   const scrollToSection = (tabId: string) => {
@@ -372,17 +389,43 @@ const MagnetReviewPanelInner: React.FC<MagnetReviewPanelProps> = ({
     }
   };
 
+  // Handle minimized state
+  if (isMinimized) {
+    return (
+      <div className="flex flex-col items-center bg-transparent h-full justify-center py-4">
+        {/* Vertical MAGNET Tabs */}
+        <div className="flex flex-col gap-2">
+          {magnetTabs.map((tab) => {
+            const isActive = tab.id === currentVisibleTab;
+            const isAnswered = tab.questions.some((q) =>
+              isQuestionAnswered(q.id),
+            );
+
+            return (
+              <button
+                key={tab.id}
+                onClick={() => {
+                  setCurrentVisibleTab(tab.id);
+                  onTabChange(tab.id);
+                  onMinimizeToggle(); // Expand when tab is clicked
+                }}
+                className={`h-8 w-8 text-sm font-medium transition-colors flex items-center justify-center rounded ${
+                  isActive
+                    ? `${tab.color} text-white shadow-lg`
+                    : "text-gray-700 hover:bg-gray-50 border border-gray-100 bg-white shadow-sm"
+                } ${isAnswered ? "ring-1 ring-primary/30" : "opacity-60"}`}
+              >
+                {tab.id}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="w-full h-full bg-background flex flex-col">
-      <div className="p-4 border-b">
-        <p className="text-sm text-muted-foreground">
-          Evaluate the website using the MAGNET framework
-          <span className="ml-2 text-xs text-green-600">
-            • Using dynamic settings
-          </span>
-        </p>
-      </div>
-
       {/* Tab Navigation */}
       <div className="border-b">
         <Tabs value={currentVisibleTab} onValueChange={handleTabClick}>
@@ -409,16 +452,16 @@ const MagnetReviewPanelInner: React.FC<MagnetReviewPanelProps> = ({
           </TabsList>
         </Tabs>
       </div>
-
       {/* Continuous Scrolling Content */}
-      <ScrollArea className="h-[calc(100vh-220px)]" ref={scrollAreaRef}>
+      <ScrollArea className="flex-1 min-h-0" ref={scrollAreaRef}>
         <div className="space-y-0">
           {magnetTabs.map((tab, tabIndex) => (
             <div
               key={tab.id}
               ref={(el) => (sectionRefs.current[tab.id] = el)}
               data-tab-id={tab.id}
-              className="min-h-[300px]" // Increased min height for better detection
+              // Increased min height for better detection
+              className="min-h-[300px]"
             >
               {/* Section Header */}
               <div className={`p-4 ${tab.color} text-white`}>
@@ -577,7 +620,6 @@ const MagnetReviewPanelInner: React.FC<MagnetReviewPanelProps> = ({
                                           </div>
                                         )}
                                     </div>
-
                                     {/* Sub-options for "needs_work" */}
                                     {option.value === "needs_work" &&
                                       (expandedSubOptions[question.id] ||
@@ -834,12 +876,11 @@ const MagnetReviewPanelInner: React.FC<MagnetReviewPanelProps> = ({
           ))}
         </div>
       </ScrollArea>
-
       {/* Compact Footer with Navigation and Actions */}
-      <div className="border-t bg-background p-3">
-        <div className="flex items-center justify-between gap-3">
+      <div className="border-t bg-background p-3 w-full max-w-full overflow-hidden">
+        <div className="flex items-center justify-between gap-3 w-full max-w-full">
           {/* Navigation Arrows */}
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 shrink-0">
             <Button
               variant="ghost"
               size="sm"
@@ -881,23 +922,25 @@ const MagnetReviewPanelInner: React.FC<MagnetReviewPanelProps> = ({
           </div>
 
           {/* Progress and Auto-save Status */}
-          <div className="flex items-center gap-3 flex-1">
+          <div className="flex items-center gap-3 flex-1 min-w-0">
             {/* Compact Progress */}
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span>{getCompletionStats().percentage}%</span>
-              <div className="h-1.5 w-16 rounded-full bg-secondary/20">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground min-w-0">
+              <span className="shrink-0">
+                {getCompletionStats().percentage}%
+              </span>
+              <div className="h-1.5 w-16 rounded-full bg-secondary/20 shrink-0">
                 <div
                   className="h-full rounded-full bg-primary transition-all duration-300"
                   style={{ width: `${getCompletionStats().percentage}%` }}
                 />
               </div>
-              <span className="whitespace-nowrap">
+              <span className="whitespace-nowrap shrink-0">
                 {getCompletionStats().answered}/{getCompletionStats().total}
               </span>
             </div>
 
             {/* Auto-save Status */}
-            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+            <div className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
               {autoSaveStatus === "saving" && (
                 <>
                   <Clock className="h-3 w-3 animate-pulse" />
@@ -918,7 +961,7 @@ const MagnetReviewPanelInner: React.FC<MagnetReviewPanelProps> = ({
             size="sm"
             onClick={handleSubmit}
             disabled={isSubmitting || getCompletionStats().answered === 0}
-            className="h-8"
+            className="h-8 shrink-0"
           >
             <Send className="h-4 w-4 mr-1" />
             {isSubmitting ? "Submitting..." : "Submit"}

@@ -23,6 +23,8 @@ import {
   Home,
   FolderOpen,
   BarChart3,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -123,6 +125,8 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
     null,
   );
   const [isMagnetPanelOpen, setIsMagnetPanelOpen] = useState<boolean>(false);
+  const [isMagnetPanelMinimized, setIsMagnetPanelMinimized] =
+    useState<boolean>(false);
   const [magnetActiveTab, setMagnetActiveTab] = useState<string>(currentTab);
   const [zoomLevel, setZoomLevel] = useState<number>(0.75);
   const [isCapturing, setIsCapturing] = useState<boolean>(false);
@@ -191,6 +195,8 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
 
   const toggleFullscreen = () => setIsFullscreen(!isFullscreen);
   const toggleMagnetPanel = () => setIsMagnetPanelOpen(!isMagnetPanelOpen);
+  const toggleMagnetPanelMinimize = () =>
+    setIsMagnetPanelMinimized(!isMagnetPanelMinimized);
 
   const handleMagnetTabChange = (tabId: string) => {
     setMagnetActiveTab(tabId);
@@ -1241,7 +1247,6 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
           </TooltipProvider>
         </div>
       </div>
-
       {/* Viewport container */}
       <div className="relative flex-1">
         <div
@@ -1310,7 +1315,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
               ref={iframeRef}
               src={currentUrl}
               onLoad={handleIframeLoad}
-              className="w-full h-full border-0"
+              className="w-full h-full border-0 border-transparent border-none"
               style={{
                 width: isFullscreen ? "100vw" : `${currentDevice.width}px`,
                 height: isFullscreen ? "100vh" : `${currentDevice.height}px`,
@@ -1344,30 +1349,87 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
 
         {/* Floating MAGNET Review Panel */}
         {isMagnetPanelOpen && (
-          <>
+          <div
+            className={`fixed left-4 top-1/2 -translate-y-1/2 z-50 animate-in slide-in-from-left-4 duration-300 ${
+              isMagnetPanelMinimized ? "w-[60px]" : "w-[275px] max-w-[275px]"
+            }`}
+          >
             <div
-              className="absolute inset-0 bg-black/20 z-40"
-              onClick={toggleMagnetPanel}
-            />
-            <div className="absolute left-4 top-4 bottom-4 w-[380px] z-50 animate-in slide-in-from-left-4 duration-300">
-              <div className="bg-background border rounded-lg shadow-2xl h-full flex flex-col">
-                <div className="flex items-center justify-between p-4 border-b">
-                  <h2 className="text-lg font-semibold">What's your MAGNET?</h2>
+              className={`h-[92vh] flex flex-col relative ${
+                isMagnetPanelMinimized
+                  ? ""
+                  : "bg-background border rounded-lg shadow-2xl overflow-hidden"
+              }`}
+            >
+              {/* Minimize/Expand Toggle - positioned at the right edge - only show when not minimized */}
+              {!isMagnetPanelMinimized && (
+                <div className="absolute -right-3 top-1/2 -translate-y-1/2 z-10">
                   <Button
-                    variant="ghost"
+                    variant="default"
                     size="sm"
-                    onClick={toggleMagnetPanel}
-                    className="h-8 w-8 p-0"
+                    onClick={toggleMagnetPanelMinimize}
+                    className="h-8 w-6 p-0 rounded-l-lg rounded-r-none shadow-lg border-r-0"
                   >
-                    <X className="h-4 w-4" />
+                    <ChevronLeft className="h-4 w-4" />
                   </Button>
                 </div>
-                <div className="flex-1 overflow-hidden">
+              )}
+
+              {!isMagnetPanelMinimized ? (
+                <>
+                  <div className="flex items-center p-4 border-b justify-center h-0.5">
+                    <h2 className="text-lg font-semibold leading-tight">
+                      What's your MAGNET?
+                    </h2>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={toggleMagnetPanel}
+                      className="h-8 w-8 p-0"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div className="flex-1 overflow-hidden">
+                    <MagnetReviewPanel
+                      activeTab={magnetActiveTab}
+                      projectId={projectId}
+                      reviewId={reviewId}
+                      onTabChange={handleMagnetTabChange}
+                      isMinimized={false}
+                      onMinimizeToggle={toggleMagnetPanelMinimize}
+                      onResponseSave={(tabId, questionId, answer, notes) => {
+                        console.log("Response saved:", {
+                          tabId,
+                          questionId,
+                          answer,
+                          notes,
+                        });
+                      }}
+                      onSubmit={(responses) => {
+                        console.log("Review submitted:", responses);
+                        toast({
+                          title: "Review submitted!",
+                          description:
+                            "Your MAGNET review has been submitted successfully.",
+                          duration: 5000,
+                        });
+                      }}
+                    />
+                  </div>
+                </>
+              ) : (
+                <div className="h-full flex flex-col items-center justify-center py-4">
                   <MagnetReviewPanel
                     activeTab={magnetActiveTab}
                     projectId={projectId}
                     reviewId={reviewId}
-                    onTabChange={handleMagnetTabChange}
+                    onTabChange={(tabId) => {
+                      handleMagnetTabChange(tabId);
+                      setIsMagnetPanelMinimized(false); // Expand when tab is clicked
+                    }}
+                    isMinimized={true}
+                    onMinimizeToggle={toggleMagnetPanelMinimize}
                     onResponseSave={(tabId, questionId, answer, notes) => {
                       console.log("Response saved:", {
                         tabId,
@@ -1387,9 +1449,9 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
                     }}
                   />
                 </div>
-              </div>
+              )}
             </div>
-          </>
+          </div>
         )}
       </div>
     </div>
