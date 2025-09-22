@@ -162,6 +162,8 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const persistTimerRef = useRef<number | null>(null);
+  const latestAnnotationsRef = useRef<any>(null);
 
   const currentDevice =
     deviceSizes.find((device) => device.id === selectedDevice) ||
@@ -285,13 +287,17 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
     setIsAnnotationToolboxOpen(!isAnnotationToolboxOpen);
 
   const handleAnnotationChange = (newAnnotations: any) => {
-    setAnnotations(newAnnotations);
-    try {
-      const storageKey = `annotations-${projectId}-${reviewId}-${magnetActiveTab}`;
-      localStorage.setItem(storageKey, JSON.stringify(newAnnotations));
-    } catch (error) {
-      console.error("Failed to save annotations:", error);
-    }
+    latestAnnotationsRef.current = newAnnotations;
+    if (persistTimerRef.current) window.clearTimeout(persistTimerRef.current);
+    persistTimerRef.current = window.setTimeout(() => {
+      try {
+        const storageKey = `annotations-${projectId}-${reviewId}-${magnetActiveTab}`;
+        const payload = latestAnnotationsRef.current || newAnnotations;
+        localStorage.setItem(storageKey, JSON.stringify(payload));
+      } catch (error) {
+        console.error("Failed to save annotations:", error);
+      }
+    }, 250);
   };
 
   // Load saved annotations

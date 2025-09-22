@@ -54,6 +54,586 @@ import {
 } from "@/contexts/SettingsContext";
 import { toast } from "@/components/ui/use-toast";
 
+// dnd-kit imports
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+
+// Sortable Question Card component to enable drag handle via GripVertical
+interface SortableQuestionCardProps {
+  question: Question;
+  categoryColor: string;
+  isEditing: boolean;
+  editingQuestion: Question | null;
+  setEditingQuestion: React.Dispatch<React.SetStateAction<Question | null>>;
+  handleUpdateQuestion: () => void;
+  handleDeleteQuestion: (id: string) => void;
+}
+
+const SortableQuestionCard: React.FC<SortableQuestionCardProps> = ({
+  question,
+  categoryColor,
+  isEditing,
+  editingQuestion,
+  setEditingQuestion,
+  handleUpdateQuestion,
+  handleDeleteQuestion,
+}) => {
+  const { attributes, listeners, setNodeRef, transform, transition } =
+    useSortable({ id: question.id });
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    borderLeftColor: categoryColor.replace("bg-", "#"),
+  };
+
+  return (
+    <Card ref={setNodeRef} className="border-l-4" style={style}>
+      <CardContent className="pt-4">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-2">
+              <GripVertical
+                className="h-4 w-4 text-muted-foreground cursor-grab touch-none"
+                {...attributes}
+                {...listeners}
+              />
+              <Badge variant="outline">{question.type.replace("_", " ")}</Badge>
+              {question.required && <Badge variant="secondary">Required</Badge>}
+              {question.points && question.points > 0 && (
+                <Badge variant="default">{question.points} pts</Badge>
+              )}
+            </div>
+            <p className="text-sm font-medium mb-1">{question.text}</p>
+            <p className="text-xs text-muted-foreground">ID: {question.id}</p>
+          </div>
+          <div className="flex items-center gap-1">
+            <Dialog
+              open={isEditing}
+              onOpenChange={(open) => {
+                if (!open) setEditingQuestion(null);
+              }}
+            >
+              <DialogTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setEditingQuestion({ ...question })}
+                >
+                  <Edit className="h-4 w-4" />
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[600px]">
+                <DialogHeader>
+                  <DialogTitle>Edit Question</DialogTitle>
+                  <DialogDescription>
+                    Modify the question details below.
+                  </DialogDescription>
+                </DialogHeader>
+                {editingQuestion && (
+                  <div className="grid gap-4 py-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-question-text">Question Text</Label>
+                      <Textarea
+                        id="edit-question-text"
+                        value={editingQuestion.text}
+                        onChange={(e) =>
+                          setEditingQuestion((prev) =>
+                            prev ? { ...prev, text: e.target.value } : null,
+                          )
+                        }
+                        className="min-h-[80px]"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-question-type">
+                          Question Type
+                        </Label>
+                        <Select
+                          value={editingQuestion.type}
+                          onValueChange={(
+                            value: "multiple_choice" | "text" | "rating",
+                          ) =>
+                            setEditingQuestion((prev) =>
+                              prev ? { ...prev, type: value } : null,
+                            )
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="multiple_choice">
+                              Multiple Choice
+                            </SelectItem>
+                            <SelectItem value="text">Text Response</SelectItem>
+                            <SelectItem value="rating">Rating Scale</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-question-points">Points</Label>
+                        <Input
+                          id="edit-question-points"
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={editingQuestion.points}
+                          onChange={(e) =>
+                            setEditingQuestion((prev) =>
+                              prev
+                                ? {
+                                    ...prev,
+                                    points: parseInt(e.target.value) || 0,
+                                  }
+                                : null,
+                            )
+                          }
+                        />
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        id="edit-question-required"
+                        checked={editingQuestion.required}
+                        onChange={(e) =>
+                          setEditingQuestion((prev) =>
+                            prev
+                              ? { ...prev, required: e.target.checked }
+                              : null,
+                          )
+                        }
+                      />
+                      <Label htmlFor="edit-question-required">
+                        Required Question
+                      </Label>
+                    </div>
+
+                    {editingQuestion.type === "multiple_choice" && (
+                      <div className="space-y-3">
+                        <Label>Answer Options</Label>
+                        <div className="grid grid-cols-12 gap-2 items-center text-sm font-medium text-muted-foreground">
+                          <div className="col-span-3">Option Value</div>
+                          <div className="col-span-4">Display Label</div>
+                          <div className="col-span-3">Point Multiplier</div>
+                          <div className="col-span-2">Actions</div>
+                        </div>
+                        {editingQuestion.config?.options?.map(
+                          (option, index) => (
+                            <div
+                              key={index}
+                              className="grid grid-cols-12 gap-2 items-center"
+                            >
+                              <Input
+                                placeholder="e.g., yes"
+                                value={option.value}
+                                onChange={(e) => {
+                                  const newOptions = [
+                                    ...(editingQuestion.config?.options || []),
+                                  ];
+                                  newOptions[index] = {
+                                    ...option,
+                                    value: e.target.value,
+                                  };
+                                  setEditingQuestion((prev) =>
+                                    prev
+                                      ? {
+                                          ...prev,
+                                          config: {
+                                            ...prev.config,
+                                            options: newOptions,
+                                          },
+                                        }
+                                      : null,
+                                  );
+                                }}
+                                className="col-span-3"
+                              />
+                              <Input
+                                placeholder="e.g., Yes"
+                                value={option.label}
+                                onChange={(e) => {
+                                  const newOptions = [
+                                    ...(editingQuestion.config?.options || []),
+                                  ];
+                                  newOptions[index] = {
+                                    ...option,
+                                    label: e.target.value,
+                                  };
+                                  setEditingQuestion((prev) =>
+                                    prev
+                                      ? {
+                                          ...prev,
+                                          config: {
+                                            ...prev.config,
+                                            options: newOptions,
+                                          },
+                                        }
+                                      : null,
+                                  );
+                                }}
+                                className="col-span-4"
+                              />
+                              <Input
+                                type="number"
+                                placeholder="0.0 - 1.0"
+                                min="0"
+                                max="1"
+                                step="0.1"
+                                value={option.points}
+                                onChange={(e) => {
+                                  const newOptions = [
+                                    ...(editingQuestion.config?.options || []),
+                                  ];
+                                  newOptions[index] = {
+                                    ...option,
+                                    points: parseFloat(e.target.value) || 0,
+                                  };
+                                  setEditingQuestion((prev) =>
+                                    prev
+                                      ? {
+                                          ...prev,
+                                          config: {
+                                            ...prev.config,
+                                            options: newOptions,
+                                          },
+                                        }
+                                      : null,
+                                  );
+                                }}
+                                className="col-span-3"
+                              />
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  const newOptions =
+                                    editingQuestion.config?.options?.filter(
+                                      (_, i) => i !== index,
+                                    ) || [];
+                                  setEditingQuestion((prev) =>
+                                    prev
+                                      ? {
+                                          ...prev,
+                                          config: {
+                                            ...prev.config,
+                                            options: newOptions,
+                                          },
+                                        }
+                                      : null,
+                                  );
+                                }}
+                                className="col-span-2"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ),
+                        )}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const newOptions = [
+                              ...(editingQuestion.config?.options || []),
+                            ];
+                            newOptions.push({
+                              value: "",
+                              label: "",
+                              points: 0,
+                            });
+                            setEditingQuestion((prev) =>
+                              prev
+                                ? {
+                                    ...prev,
+                                    config: {
+                                      ...prev.config,
+                                      options: newOptions,
+                                    },
+                                  }
+                                : null,
+                            );
+                          }}
+                        >
+                          <Plus className="h-4 w-4 mr-2" />
+                          Add Option
+                        </Button>
+                      </div>
+                    )}
+
+                    {editingQuestion.type === "rating" && (
+                      <div className="space-y-3">
+                        <Label>Rating Scale Configuration</Label>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="edit-rating-min">
+                              Minimum Value
+                            </Label>
+                            <Input
+                              id="edit-rating-min"
+                              type="number"
+                              value={editingQuestion.config?.rating?.min || 1}
+                              onChange={(e) => {
+                                setEditingQuestion((prev) =>
+                                  prev
+                                    ? {
+                                        ...prev,
+                                        config: {
+                                          ...prev.config,
+                                          rating: {
+                                            ...prev.config?.rating,
+                                            min: parseInt(e.target.value) || 1,
+                                          },
+                                        },
+                                      }
+                                    : null,
+                                );
+                              }}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="edit-rating-max">
+                              Maximum Value
+                            </Label>
+                            <Input
+                              id="edit-rating-max"
+                              type="number"
+                              value={editingQuestion.config?.rating?.max || 5}
+                              onChange={(e) => {
+                                setEditingQuestion((prev) =>
+                                  prev
+                                    ? {
+                                        ...prev,
+                                        config: {
+                                          ...prev.config,
+                                          rating: {
+                                            ...prev.config?.rating,
+                                            max: parseInt(e.target.value) || 5,
+                                          },
+                                        },
+                                      }
+                                    : null,
+                                );
+                              }}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="edit-rating-min-label">
+                              Min Label
+                            </Label>
+                            <Input
+                              id="edit-rating-min-label"
+                              placeholder="e.g., Poor"
+                              value={
+                                editingQuestion.config?.rating?.minLabel || ""
+                              }
+                              onChange={(e) => {
+                                setEditingQuestion((prev) =>
+                                  prev
+                                    ? {
+                                        ...prev,
+                                        config: {
+                                          ...prev.config,
+                                          rating: {
+                                            ...prev.config?.rating,
+                                            minLabel: e.target.value,
+                                          },
+                                        },
+                                      }
+                                    : null,
+                                );
+                              }}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="edit-rating-max-label">
+                              Max Label
+                            </Label>
+                            <Input
+                              id="edit-rating-max-label"
+                              placeholder="e.g., Excellent"
+                              value={
+                                editingQuestion.config?.rating?.maxLabel || ""
+                              }
+                              onChange={(e) => {
+                                setEditingQuestion((prev) =>
+                                  prev
+                                    ? {
+                                        ...prev,
+                                        config: {
+                                          ...prev.config,
+                                          rating: {
+                                            ...prev.config?.rating,
+                                            maxLabel: e.target.value,
+                                          },
+                                        },
+                                      }
+                                    : null,
+                                );
+                              }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {editingQuestion.type === "text" && (
+                      <div className="space-y-3">
+                        <Label>Text Input Configuration</Label>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="edit-text-placeholder">
+                              Placeholder Text
+                            </Label>
+                            <Input
+                              id="edit-text-placeholder"
+                              placeholder="Enter placeholder..."
+                              value={
+                                editingQuestion.config?.text?.placeholder || ""
+                              }
+                              onChange={(e) => {
+                                setEditingQuestion((prev) =>
+                                  prev
+                                    ? {
+                                        ...prev,
+                                        config: {
+                                          ...prev.config,
+                                          text: {
+                                            ...prev.config?.text,
+                                            placeholder: e.target.value,
+                                          },
+                                        },
+                                      }
+                                    : null,
+                                );
+                              }}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="edit-text-max-length">
+                              Max Length
+                            </Label>
+                            <Input
+                              id="edit-text-max-length"
+                              type="number"
+                              min="1"
+                              value={
+                                editingQuestion.config?.text?.maxLength || 500
+                              }
+                              onChange={(e) => {
+                                setEditingQuestion((prev) =>
+                                  prev
+                                    ? {
+                                        ...prev,
+                                        config: {
+                                          ...prev.config,
+                                          text: {
+                                            ...prev.config?.text,
+                                            maxLength:
+                                              parseInt(e.target.value) || 500,
+                                          },
+                                        },
+                                      }
+                                    : null,
+                                );
+                              }}
+                            />
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            id="edit-text-multiline"
+                            checked={
+                              editingQuestion.config?.text?.multiline || false
+                            }
+                            onChange={(e) => {
+                              setEditingQuestion((prev) =>
+                                prev
+                                  ? {
+                                      ...prev,
+                                      config: {
+                                        ...prev.config,
+                                        text: {
+                                          ...prev.config?.text,
+                                          multiline: e.target.checked,
+                                        },
+                                      },
+                                    }
+                                  : null,
+                              );
+                            }}
+                          />
+                          <Label htmlFor="edit-text-multiline">
+                            Multiline Text Area
+                          </Label>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+                <DialogFooter>
+                  <Button
+                    variant="outline"
+                    onClick={() => setEditingQuestion(null)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button onClick={handleUpdateQuestion}>
+                    <Save className="mr-2 h-4 w-4" />
+                    Update Question
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="ghost" size="sm">
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete Question?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will permanently delete the question. This action
+                    cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => handleDeleteQuestion(question.id)}
+                  >
+                    Delete Question
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
 const AdminSettings: React.FC = () => {
   // Add error boundary for context
   let settingsContext;
@@ -88,6 +668,7 @@ const AdminSettings: React.FC = () => {
     addQuestion,
     updateQuestion,
     deleteQuestion,
+    reorderQuestions,
     resetToDefaults,
     getAverageScores,
     getReviewScores,
@@ -243,6 +824,27 @@ const AdminSettings: React.FC = () => {
 
   const handleBackToApp = () => {
     window.location.href = "/";
+  };
+
+  // dnd-kit setup
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+  );
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id || !currentCategory) return;
+
+    const oldIndex = currentCategory.questions.findIndex(
+      (q) => q.id === active.id,
+    );
+    const newIndex = currentCategory.questions.findIndex(
+      (q) => q.id === over.id,
+    );
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reordered = arrayMove(currentCategory.questions, oldIndex, newIndex);
+    reorderQuestions(activeCategory, reordered);
   };
 
   return (
@@ -750,7 +1352,6 @@ const AdminSettings: React.FC = () => {
                           {newQuestion.type === "multiple_choice" && (
                             <div className="space-y-3">
                               <Label>Answer Options</Label>
-                              {/* Column Headers */}
                               <div className="grid grid-cols-12 gap-2 items-center text-sm font-medium text-muted-foreground">
                                 <div className="col-span-3">Option Value</div>
                                 <div className="col-span-4">Display Label</div>
@@ -1090,662 +1691,31 @@ const AdminSettings: React.FC = () => {
                 <CardContent>
                   <ScrollArea className="h-[600px]">
                     <div className="space-y-4">
-                      {currentCategory?.questions.map((question, index) => (
-                        <Card
-                          key={question.id}
-                          className="border-l-4"
-                          style={{
-                            borderLeftColor: currentCategory.color.replace(
-                              "bg-",
-                              "#",
-                            ),
-                          }}
+                      <DndContext
+                        sensors={sensors}
+                        collisionDetection={closestCenter}
+                        onDragEnd={handleDragEnd}
+                      >
+                        <SortableContext
+                          items={(currentCategory?.questions || []).map(
+                            (q) => q.id,
+                          )}
+                          strategy={verticalListSortingStrategy}
                         >
-                          <CardContent className="pt-4">
-                            <div className="flex items-start justify-between gap-4">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-2">
-                                  <GripVertical className="h-4 w-4 text-muted-foreground" />
-                                  <Badge variant="outline">
-                                    {question.type.replace("_", " ")}
-                                  </Badge>
-                                  {question.required && (
-                                    <Badge variant="secondary">Required</Badge>
-                                  )}
-                                  {question.points && question.points > 0 && (
-                                    <Badge variant="default">
-                                      {question.points} pts
-                                    </Badge>
-                                  )}
-                                </div>
-                                <p className="text-sm font-medium mb-1">
-                                  {question.text}
-                                </p>
-                                <p className="text-xs text-muted-foreground">
-                                  ID: {question.id}
-                                </p>
-                              </div>
-                              <div className="flex items-center gap-1">
-                                <Dialog
-                                  open={editingQuestion?.id === question.id}
-                                  onOpenChange={(open) => {
-                                    if (!open) setEditingQuestion(null);
-                                  }}
-                                >
-                                  <DialogTrigger asChild>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() =>
-                                        setEditingQuestion({ ...question })
-                                      }
-                                    >
-                                      <Edit className="h-4 w-4" />
-                                    </Button>
-                                  </DialogTrigger>
-                                  <DialogContent className="sm:max-w-[600px]">
-                                    <DialogHeader>
-                                      <DialogTitle>Edit Question</DialogTitle>
-                                      <DialogDescription>
-                                        Modify the question details below.
-                                      </DialogDescription>
-                                    </DialogHeader>
-                                    {editingQuestion && (
-                                      <div className="grid gap-4 py-4">
-                                        <div className="space-y-2">
-                                          <Label htmlFor="edit-question-text">
-                                            Question Text
-                                          </Label>
-                                          <Textarea
-                                            id="edit-question-text"
-                                            value={editingQuestion.text}
-                                            onChange={(e) =>
-                                              setEditingQuestion((prev) =>
-                                                prev
-                                                  ? {
-                                                      ...prev,
-                                                      text: e.target.value,
-                                                    }
-                                                  : null,
-                                              )
-                                            }
-                                            className="min-h-[80px]"
-                                          />
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-4">
-                                          <div className="space-y-2">
-                                            <Label htmlFor="edit-question-type">
-                                              Question Type
-                                            </Label>
-                                            <Select
-                                              value={editingQuestion.type}
-                                              onValueChange={(
-                                                value:
-                                                  | "multiple_choice"
-                                                  | "text"
-                                                  | "rating",
-                                              ) =>
-                                                setEditingQuestion((prev) =>
-                                                  prev
-                                                    ? { ...prev, type: value }
-                                                    : null,
-                                                )
-                                              }
-                                            >
-                                              <SelectTrigger>
-                                                <SelectValue />
-                                              </SelectTrigger>
-                                              <SelectContent>
-                                                <SelectItem value="multiple_choice">
-                                                  Multiple Choice
-                                                </SelectItem>
-                                                <SelectItem value="text">
-                                                  Text Response
-                                                </SelectItem>
-                                                <SelectItem value="rating">
-                                                  Rating Scale
-                                                </SelectItem>
-                                              </SelectContent>
-                                            </Select>
-                                          </div>
-                                          <div className="space-y-2">
-                                            <Label htmlFor="edit-question-points">
-                                              Points
-                                            </Label>
-                                            <Input
-                                              id="edit-question-points"
-                                              type="number"
-                                              min="0"
-                                              max="100"
-                                              value={editingQuestion.points}
-                                              onChange={(e) =>
-                                                setEditingQuestion((prev) =>
-                                                  prev
-                                                    ? {
-                                                        ...prev,
-                                                        points:
-                                                          parseInt(
-                                                            e.target.value,
-                                                          ) || 0,
-                                                      }
-                                                    : null,
-                                                )
-                                              }
-                                            />
-                                          </div>
-                                        </div>
-                                        <div className="flex items-center space-x-2">
-                                          <input
-                                            type="checkbox"
-                                            id="edit-question-required"
-                                            checked={editingQuestion.required}
-                                            onChange={(e) =>
-                                              setEditingQuestion((prev) =>
-                                                prev
-                                                  ? {
-                                                      ...prev,
-                                                      required:
-                                                        e.target.checked,
-                                                    }
-                                                  : null,
-                                              )
-                                            }
-                                          />
-                                          <Label htmlFor="edit-question-required">
-                                            Required Question
-                                          </Label>
-                                        </div>
-
-                                        {/* Type-specific configuration for editing */}
-                                        {editingQuestion.type ===
-                                          "multiple_choice" && (
-                                          <div className="space-y-3">
-                                            <Label>Answer Options</Label>
-                                            {/* Column Headers */}
-                                            <div className="grid grid-cols-12 gap-2 items-center text-sm font-medium text-muted-foreground">
-                                              <div className="col-span-3">
-                                                Option Value
-                                              </div>
-                                              <div className="col-span-4">
-                                                Display Label
-                                              </div>
-                                              <div className="col-span-3">
-                                                Point Multiplier
-                                              </div>
-                                              <div className="col-span-2">
-                                                Actions
-                                              </div>
-                                            </div>
-                                            {editingQuestion.config?.options?.map(
-                                              (option, index) => (
-                                                <div
-                                                  key={index}
-                                                  className="grid grid-cols-12 gap-2 items-center"
-                                                >
-                                                  <Input
-                                                    placeholder="e.g., yes"
-                                                    value={option.value}
-                                                    onChange={(e) => {
-                                                      const newOptions = [
-                                                        ...(editingQuestion
-                                                          .config?.options ||
-                                                          []),
-                                                      ];
-                                                      newOptions[index] = {
-                                                        ...option,
-                                                        value: e.target.value,
-                                                      };
-                                                      setEditingQuestion(
-                                                        (prev) =>
-                                                          prev
-                                                            ? {
-                                                                ...prev,
-                                                                config: {
-                                                                  ...prev.config,
-                                                                  options:
-                                                                    newOptions,
-                                                                },
-                                                              }
-                                                            : null,
-                                                      );
-                                                    }}
-                                                    className="col-span-3"
-                                                  />
-                                                  <Input
-                                                    placeholder="e.g., Yes"
-                                                    value={option.label}
-                                                    onChange={(e) => {
-                                                      const newOptions = [
-                                                        ...(editingQuestion
-                                                          .config?.options ||
-                                                          []),
-                                                      ];
-                                                      newOptions[index] = {
-                                                        ...option,
-                                                        label: e.target.value,
-                                                      };
-                                                      setEditingQuestion(
-                                                        (prev) =>
-                                                          prev
-                                                            ? {
-                                                                ...prev,
-                                                                config: {
-                                                                  ...prev.config,
-                                                                  options:
-                                                                    newOptions,
-                                                                },
-                                                              }
-                                                            : null,
-                                                      );
-                                                    }}
-                                                    className="col-span-4"
-                                                  />
-                                                  <Input
-                                                    type="number"
-                                                    placeholder="0.0 - 1.0"
-                                                    min="0"
-                                                    max="1"
-                                                    step="0.1"
-                                                    value={option.points}
-                                                    onChange={(e) => {
-                                                      const newOptions = [
-                                                        ...(editingQuestion
-                                                          .config?.options ||
-                                                          []),
-                                                      ];
-                                                      newOptions[index] = {
-                                                        ...option,
-                                                        points:
-                                                          parseFloat(
-                                                            e.target.value,
-                                                          ) || 0,
-                                                      };
-                                                      setEditingQuestion(
-                                                        (prev) =>
-                                                          prev
-                                                            ? {
-                                                                ...prev,
-                                                                config: {
-                                                                  ...prev.config,
-                                                                  options:
-                                                                    newOptions,
-                                                                },
-                                                              }
-                                                            : null,
-                                                      );
-                                                    }}
-                                                    className="col-span-3"
-                                                  />
-                                                  <Button
-                                                    type="button"
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    onClick={() => {
-                                                      const newOptions =
-                                                        editingQuestion.config?.options?.filter(
-                                                          (_, i) => i !== index,
-                                                        ) || [];
-                                                      setEditingQuestion(
-                                                        (prev) =>
-                                                          prev
-                                                            ? {
-                                                                ...prev,
-                                                                config: {
-                                                                  ...prev.config,
-                                                                  options:
-                                                                    newOptions,
-                                                                },
-                                                              }
-                                                            : null,
-                                                      );
-                                                    }}
-                                                    className="col-span-2"
-                                                  >
-                                                    <Trash2 className="h-4 w-4" />
-                                                  </Button>
-                                                </div>
-                                              ),
-                                            )}
-                                            <Button
-                                              type="button"
-                                              variant="outline"
-                                              size="sm"
-                                              onClick={() => {
-                                                const newOptions = [
-                                                  ...(editingQuestion.config
-                                                    ?.options || []),
-                                                ];
-                                                newOptions.push({
-                                                  value: "",
-                                                  label: "",
-                                                  points: 0,
-                                                });
-                                                setEditingQuestion((prev) =>
-                                                  prev
-                                                    ? {
-                                                        ...prev,
-                                                        config: {
-                                                          ...prev.config,
-                                                          options: newOptions,
-                                                        },
-                                                      }
-                                                    : null,
-                                                );
-                                              }}
-                                            >
-                                              <Plus className="h-4 w-4 mr-2" />
-                                              Add Option
-                                            </Button>
-                                          </div>
-                                        )}
-
-                                        {editingQuestion.type === "rating" && (
-                                          <div className="space-y-3">
-                                            <Label>
-                                              Rating Scale Configuration
-                                            </Label>
-                                            <div className="grid grid-cols-2 gap-4">
-                                              <div className="space-y-2">
-                                                <Label htmlFor="edit-rating-min">
-                                                  Minimum Value
-                                                </Label>
-                                                <Input
-                                                  id="edit-rating-min"
-                                                  type="number"
-                                                  value={
-                                                    editingQuestion.config
-                                                      ?.rating?.min || 1
-                                                  }
-                                                  onChange={(e) => {
-                                                    setEditingQuestion(
-                                                      (prev) =>
-                                                        prev
-                                                          ? {
-                                                              ...prev,
-                                                              config: {
-                                                                ...prev.config,
-                                                                rating: {
-                                                                  ...prev.config
-                                                                    ?.rating,
-                                                                  min:
-                                                                    parseInt(
-                                                                      e.target
-                                                                        .value,
-                                                                    ) || 1,
-                                                                },
-                                                              },
-                                                            }
-                                                          : null,
-                                                    );
-                                                  }}
-                                                />
-                                              </div>
-                                              <div className="space-y-2">
-                                                <Label htmlFor="edit-rating-max">
-                                                  Maximum Value
-                                                </Label>
-                                                <Input
-                                                  id="edit-rating-max"
-                                                  type="number"
-                                                  value={
-                                                    editingQuestion.config
-                                                      ?.rating?.max || 5
-                                                  }
-                                                  onChange={(e) => {
-                                                    setEditingQuestion(
-                                                      (prev) =>
-                                                        prev
-                                                          ? {
-                                                              ...prev,
-                                                              config: {
-                                                                ...prev.config,
-                                                                rating: {
-                                                                  ...prev.config
-                                                                    ?.rating,
-                                                                  max:
-                                                                    parseInt(
-                                                                      e.target
-                                                                        .value,
-                                                                    ) || 5,
-                                                                },
-                                                              },
-                                                            }
-                                                          : null,
-                                                    );
-                                                  }}
-                                                />
-                                              </div>
-                                              <div className="space-y-2">
-                                                <Label htmlFor="edit-rating-min-label">
-                                                  Min Label
-                                                </Label>
-                                                <Input
-                                                  id="edit-rating-min-label"
-                                                  placeholder="e.g., Poor"
-                                                  value={
-                                                    editingQuestion.config
-                                                      ?.rating?.minLabel || ""
-                                                  }
-                                                  onChange={(e) => {
-                                                    setEditingQuestion(
-                                                      (prev) =>
-                                                        prev
-                                                          ? {
-                                                              ...prev,
-                                                              config: {
-                                                                ...prev.config,
-                                                                rating: {
-                                                                  ...prev.config
-                                                                    ?.rating,
-                                                                  minLabel:
-                                                                    e.target
-                                                                      .value,
-                                                                },
-                                                              },
-                                                            }
-                                                          : null,
-                                                    );
-                                                  }}
-                                                />
-                                              </div>
-                                              <div className="space-y-2">
-                                                <Label htmlFor="edit-rating-max-label">
-                                                  Max Label
-                                                </Label>
-                                                <Input
-                                                  id="edit-rating-max-label"
-                                                  placeholder="e.g., Excellent"
-                                                  value={
-                                                    editingQuestion.config
-                                                      ?.rating?.maxLabel || ""
-                                                  }
-                                                  onChange={(e) => {
-                                                    setEditingQuestion(
-                                                      (prev) =>
-                                                        prev
-                                                          ? {
-                                                              ...prev,
-                                                              config: {
-                                                                ...prev.config,
-                                                                rating: {
-                                                                  ...prev.config
-                                                                    ?.rating,
-                                                                  maxLabel:
-                                                                    e.target
-                                                                      .value,
-                                                                },
-                                                              },
-                                                            }
-                                                          : null,
-                                                    );
-                                                  }}
-                                                />
-                                              </div>
-                                            </div>
-                                          </div>
-                                        )}
-
-                                        {editingQuestion.type === "text" && (
-                                          <div className="space-y-3">
-                                            <Label>
-                                              Text Input Configuration
-                                            </Label>
-                                            <div className="grid grid-cols-2 gap-4">
-                                              <div className="space-y-2">
-                                                <Label htmlFor="edit-text-placeholder">
-                                                  Placeholder Text
-                                                </Label>
-                                                <Input
-                                                  id="edit-text-placeholder"
-                                                  placeholder="Enter placeholder..."
-                                                  value={
-                                                    editingQuestion.config?.text
-                                                      ?.placeholder || ""
-                                                  }
-                                                  onChange={(e) => {
-                                                    setEditingQuestion(
-                                                      (prev) =>
-                                                        prev
-                                                          ? {
-                                                              ...prev,
-                                                              config: {
-                                                                ...prev.config,
-                                                                text: {
-                                                                  ...prev.config
-                                                                    ?.text,
-                                                                  placeholder:
-                                                                    e.target
-                                                                      .value,
-                                                                },
-                                                              },
-                                                            }
-                                                          : null,
-                                                    );
-                                                  }}
-                                                />
-                                              </div>
-                                              <div className="space-y-2">
-                                                <Label htmlFor="edit-text-max-length">
-                                                  Max Length
-                                                </Label>
-                                                <Input
-                                                  id="edit-text-max-length"
-                                                  type="number"
-                                                  min="1"
-                                                  value={
-                                                    editingQuestion.config?.text
-                                                      ?.maxLength || 500
-                                                  }
-                                                  onChange={(e) => {
-                                                    setEditingQuestion(
-                                                      (prev) =>
-                                                        prev
-                                                          ? {
-                                                              ...prev,
-                                                              config: {
-                                                                ...prev.config,
-                                                                text: {
-                                                                  ...prev.config
-                                                                    ?.text,
-                                                                  maxLength:
-                                                                    parseInt(
-                                                                      e.target
-                                                                        .value,
-                                                                    ) || 500,
-                                                                },
-                                                              },
-                                                            }
-                                                          : null,
-                                                    );
-                                                  }}
-                                                />
-                                              </div>
-                                            </div>
-                                            <div className="flex items-center space-x-2">
-                                              <input
-                                                type="checkbox"
-                                                id="edit-text-multiline"
-                                                checked={
-                                                  editingQuestion.config?.text
-                                                    ?.multiline || false
-                                                }
-                                                onChange={(e) => {
-                                                  setEditingQuestion((prev) =>
-                                                    prev
-                                                      ? {
-                                                          ...prev,
-                                                          config: {
-                                                            ...prev.config,
-                                                            text: {
-                                                              ...prev.config
-                                                                ?.text,
-                                                              multiline:
-                                                                e.target
-                                                                  .checked,
-                                                            },
-                                                          },
-                                                        }
-                                                      : null,
-                                                  );
-                                                }}
-                                              />
-                                              <Label htmlFor="edit-text-multiline">
-                                                Multiline Text Area
-                                              </Label>
-                                            </div>
-                                          </div>
-                                        )}
-                                      </div>
-                                    )}
-                                    <DialogFooter>
-                                      <Button
-                                        variant="outline"
-                                        onClick={() => setEditingQuestion(null)}
-                                      >
-                                        Cancel
-                                      </Button>
-                                      <Button onClick={handleUpdateQuestion}>
-                                        <Save className="mr-2 h-4 w-4" />
-                                        Update Question
-                                      </Button>
-                                    </DialogFooter>
-                                  </DialogContent>
-                                </Dialog>
-                                <AlertDialog>
-                                  <AlertDialogTrigger asChild>
-                                    <Button variant="ghost" size="sm">
-                                      <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                  </AlertDialogTrigger>
-                                  <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                      <AlertDialogTitle>
-                                        Delete Question?
-                                      </AlertDialogTitle>
-                                      <AlertDialogDescription>
-                                        This will permanently delete the
-                                        question. This action cannot be undone.
-                                      </AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                      <AlertDialogCancel>
-                                        Cancel
-                                      </AlertDialogCancel>
-                                      <AlertDialogAction
-                                        onClick={() =>
-                                          handleDeleteQuestion(question.id)
-                                        }
-                                      >
-                                        Delete Question
-                                      </AlertDialogAction>
-                                    </AlertDialogFooter>
-                                  </AlertDialogContent>
-                                </AlertDialog>
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      ))}
+                          {currentCategory?.questions.map((question) => (
+                            <SortableQuestionCard
+                              key={question.id}
+                              question={question}
+                              categoryColor={currentCategory.color}
+                              isEditing={editingQuestion?.id === question.id}
+                              editingQuestion={editingQuestion}
+                              setEditingQuestion={setEditingQuestion}
+                              handleUpdateQuestion={handleUpdateQuestion}
+                              handleDeleteQuestion={handleDeleteQuestion}
+                            />
+                          ))}
+                        </SortableContext>
+                      </DndContext>
                     </div>
                   </ScrollArea>
                 </CardContent>

@@ -79,6 +79,7 @@ const LiveAnnotationOverlay: React.FC<LiveAnnotationOverlayProps> = ({
   const wrapperRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fabricCanvasRef = useRef<fabric.Canvas | null>(null);
+  const emitTimerRef = useRef<number | null>(null);
   const [activeTool, setActiveTool] = useState<string>(externalActiveTool);
   const [selectedColor, setSelectedColor] = useState<string>(
     externalSelectedColor || tabColor,
@@ -128,27 +129,33 @@ const LiveAnnotationOverlay: React.FC<LiveAnnotationOverlayProps> = ({
       canvas.on("object:added", (e) => {
         if (e.target && !e.target.isType("activeSelection")) {
           saveCanvasState();
-          if (fabricCanvasRef.current) {
-            const annotations = fabricCanvasRef.current.toJSON();
-            onAnnotationChange(annotations);
-          }
+          if (emitTimerRef.current) window.clearTimeout(emitTimerRef.current);
+          emitTimerRef.current = window.setTimeout(() => {
+            if (fabricCanvasRef.current) {
+              onAnnotationChange(fabricCanvasRef.current.toJSON());
+            }
+          }, 200);
         }
       });
 
       canvas.on("object:modified", () => {
         saveCanvasState();
-        if (fabricCanvasRef.current) {
-          const annotations = fabricCanvasRef.current.toJSON();
-          onAnnotationChange(annotations);
-        }
+        if (emitTimerRef.current) window.clearTimeout(emitTimerRef.current);
+        emitTimerRef.current = window.setTimeout(() => {
+          if (fabricCanvasRef.current) {
+            onAnnotationChange(fabricCanvasRef.current.toJSON());
+          }
+        }, 200);
       });
 
       canvas.on("object:removed", () => {
         saveCanvasState();
-        if (fabricCanvasRef.current) {
-          const annotations = fabricCanvasRef.current.toJSON();
-          onAnnotationChange(annotations);
-        }
+        if (emitTimerRef.current) window.clearTimeout(emitTimerRef.current);
+        emitTimerRef.current = window.setTimeout(() => {
+          if (fabricCanvasRef.current) {
+            onAnnotationChange(fabricCanvasRef.current.toJSON());
+          }
+        }, 200);
       });
 
       if (initialAnnotations) {
@@ -437,7 +444,12 @@ const LiveAnnotationOverlay: React.FC<LiveAnnotationOverlayProps> = ({
 
     setIsDrawing(false);
     setCurrentPath(null);
-    onAnnotationChange(canvas.toJSON());
+    if (emitTimerRef.current) window.clearTimeout(emitTimerRef.current);
+    emitTimerRef.current = window.setTimeout(() => {
+      if (fabricCanvasRef.current) {
+        onAnnotationChange(fabricCanvasRef.current.toJSON());
+      }
+    }, 150);
   };
 
   // Undo/Redo/Clear
@@ -467,7 +479,12 @@ const LiveAnnotationOverlay: React.FC<LiveAnnotationOverlayProps> = ({
       fabricCanvasRef.current.backgroundColor = "transparent";
       fabricCanvasRef.current.renderAll();
       saveCanvasState();
-      onAnnotationChange({ objects: [], version: "5.2.4" });
+      if (emitTimerRef.current) window.clearTimeout(emitTimerRef.current);
+      emitTimerRef.current = window.setTimeout(() => {
+        if (fabricCanvasRef.current) {
+          onAnnotationChange(fabricCanvasRef.current.toJSON());
+        }
+      }, 200);
     }
   }, [saveCanvasState, onAnnotationChange]);
 
