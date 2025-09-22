@@ -82,7 +82,7 @@ interface SettingsContextType {
   getAverageScores: () => Record<string, number>;
 }
 
-const SettingsContext = createContext<SettingsContextType | undefined>(
+export const SettingsContext = createContext<SettingsContextType | undefined>(
   undefined,
 );
 
@@ -211,7 +211,7 @@ const defaultMagnetCategories: MagnetCategory[] = [
       },
       {
         id: "a7",
-        text: "Additional notes on authentic connection:",
+        text: "Does the website avoid feeling cold, robotic, or disconnected?",
         type: "text",
         points: 0,
         required: false,
@@ -488,18 +488,31 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({
     }
   }, [magnetCategories]);
 
+  // Sync settings across tabs/iframes
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === "magnet-settings" && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          setMagnetCategories(parsed);
+        } catch (err) {
+          console.error("Error parsing settings from storage event:", err);
+        }
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+    };
+  }, []);
+
   const updateCategory = (
     categoryId: string,
     updates: Partial<MagnetCategory>,
   ) => {
-    console.log("SettingsContext: Updating category", categoryId, updates);
-    setMagnetCategories((prev) => {
-      const updated = prev.map((cat) =>
-        cat.id === categoryId ? { ...cat, ...updates } : cat,
-      );
-      console.log("SettingsContext: Categories after update", updated.length);
-      return updated;
-    });
+    setMagnetCategories((prev) =>
+      prev.map((cat) => (cat.id === categoryId ? { ...cat, ...updates } : cat)),
+    );
   };
 
   const addCategory = (categoryData: Omit<MagnetCategory, "id">) => {
@@ -509,12 +522,7 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({
       questions: [],
     };
 
-    console.log("SettingsContext: Adding new category", newCategory);
-    setMagnetCategories((prev) => {
-      const updated = [...prev, newCategory];
-      console.log("SettingsContext: Categories after add", updated.length);
-      return updated;
-    });
+    setMagnetCategories((prev) => [...prev, newCategory]);
   };
 
   const deleteCategory = (categoryId: string) => {
@@ -533,23 +541,13 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({
         questionData.config || getDefaultQuestionConfig(questionData.type),
     };
 
-    console.log(
-      "SettingsContext: Adding question to category",
-      categoryId,
-      newQuestion,
-    );
-    setMagnetCategories((prev) => {
-      const updated = prev.map((cat) =>
+    setMagnetCategories((prev) =>
+      prev.map((cat) =>
         cat.id === categoryId
           ? { ...cat, questions: [...cat.questions, newQuestion] }
           : cat,
-      );
-      console.log(
-        "SettingsContext: Categories after question add",
-        updated.length,
-      );
-      return updated;
-    });
+      ),
+    );
   };
 
   const getDefaultQuestionConfig = (type: Question["type"]) => {

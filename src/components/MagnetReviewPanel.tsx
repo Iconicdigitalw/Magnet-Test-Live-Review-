@@ -24,6 +24,8 @@ import {
 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import {
+  SettingsProvider,
+  SettingsContext,
   useSettings,
   type Question as SettingsQuestion,
   type MagnetCategory,
@@ -51,7 +53,8 @@ interface MagnetReviewPanelProps {
   ) => void;
 }
 
-const MagnetReviewPanel: React.FC<MagnetReviewPanelProps> = ({
+// Inner panel that assumes SettingsContext is available
+const MagnetReviewPanelInner: React.FC<MagnetReviewPanelProps> = ({
   activeTab = "M",
   projectId = "default-project",
   reviewId = "default-review",
@@ -59,11 +62,8 @@ const MagnetReviewPanel: React.FC<MagnetReviewPanelProps> = ({
   onResponseSave = () => {},
   onSubmit = () => {},
 }) => {
-  // Get dynamic settings from context first
-  const { magnetCategories } = useSettings();
-
-  // Use dynamic MAGNET Framework data from context
-  const magnetTabs: TabData[] = magnetCategories;
+  // Use dynamic settings from context
+  const { magnetCategories: magnetTabs } = useSettings();
 
   const [responses, setResponses] = useState<
     Record<string, { answer: string; notes: string }>
@@ -242,31 +242,6 @@ const MagnetReviewPanel: React.FC<MagnetReviewPanelProps> = ({
     }
   }, [activeTab, magnetTabs]);
 
-  // Re-render when magnetCategories change to ensure dynamic updates
-  useEffect(() => {
-    console.log(
-      "MagnetReviewPanel: magnetCategories updated",
-      magnetCategories.length,
-      "categories",
-    );
-    // Force re-initialization of intersection observers when categories change
-    const timeoutId = setTimeout(() => {
-      // Re-observe sections after categories update
-      Object.values(sectionRefs.current).forEach((ref) => {
-        if (ref) {
-          const observer = new IntersectionObserver(handleIntersection, {
-            root: scrollAreaRef.current,
-            rootMargin: "-10% 0px -70% 0px",
-            threshold: [0, 0.1, 0.25, 0.5, 0.75, 1],
-          });
-          observer.observe(ref);
-        }
-      });
-    }, 100);
-
-    return () => clearTimeout(timeoutId);
-  }, [magnetCategories, handleIntersection]);
-
   // Scroll to section when tab is clicked
   const scrollToSection = (tabId: string) => {
     const sectionRef = sectionRefs.current[tabId];
@@ -277,7 +252,7 @@ const MagnetReviewPanel: React.FC<MagnetReviewPanelProps> = ({
       );
       if (scrollArea) {
         const sectionTop = sectionRef.offsetTop;
-        scrollArea.scrollTo({
+        (scrollArea as HTMLElement).scrollTo({
           top: sectionTop,
           behavior: "smooth",
         });
@@ -361,7 +336,7 @@ const MagnetReviewPanel: React.FC<MagnetReviewPanelProps> = ({
         <p className="text-sm text-muted-foreground">
           Evaluate the website using the MAGNET framework
           <span className="ml-2 text-xs text-green-600">
-            • Using dynamic settings ({magnetTabs.length} categories)
+            • Using dynamic settings
           </span>
         </p>
       </div>
@@ -411,7 +386,7 @@ const MagnetReviewPanel: React.FC<MagnetReviewPanelProps> = ({
 
               {/* Questions */}
               <div className="p-4 space-y-6">
-                {tab.questions.map((question, questionIndex) => {
+                {tab.questions.map((question) => {
                   const isAnswered = isQuestionAnswered(question.id);
                   return (
                     <Card
@@ -717,6 +692,19 @@ const MagnetReviewPanel: React.FC<MagnetReviewPanelProps> = ({
       </div>
     </div>
   );
+};
+
+// Outer component that ensures a provider exists
+const MagnetReviewPanel: React.FC<MagnetReviewPanelProps> = (props) => {
+  const ctx = React.useContext(SettingsContext as React.Context<any>);
+  if (!ctx) {
+    return (
+      <SettingsProvider>
+        <MagnetReviewPanelInner {...props} />
+      </SettingsProvider>
+    );
+  }
+  return <MagnetReviewPanelInner {...props} />;
 };
 
 export default MagnetReviewPanel;
