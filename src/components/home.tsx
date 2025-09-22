@@ -27,6 +27,8 @@ import {
 } from "@/data/mockData";
 import { useSettings } from "@/contexts/SettingsContext";
 
+import { useNavigate } from "react-router-dom";
+
 const Home = () => {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [showNewProjectDialog, setShowNewProjectDialog] = useState(false);
@@ -35,6 +37,8 @@ const Home = () => {
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [previewProject, setPreviewProject] = useState<Project | null>(null);
   const [shareProject, setShareProject] = useState<Project | null>(null);
+
+  const navigate = useNavigate();
 
   // Settings management
   const { magnetCategories, isLoading: settingsLoading } = useSettings();
@@ -120,7 +124,7 @@ const Home = () => {
 
   // Function to navigate to admin settings
   const handleNavigateToSettings = () => {
-    window.location.href = "/admin/settings";
+    navigate("/admin/settings");
   };
 
   return (
