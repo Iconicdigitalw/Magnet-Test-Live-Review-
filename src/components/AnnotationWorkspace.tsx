@@ -37,6 +37,7 @@ import {
   Palette,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { memo } from "react";
 import {
   Select,
   SelectContent,
@@ -125,7 +126,7 @@ const ANNOTATION_COLORS = [
   { name: "Black", value: "#000000" },
 ];
 
-const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
+const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = memo(({
   url = "https://example.com",
   projectId = "project-1",
   reviewId = "review-1",
@@ -159,6 +160,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
   const [isAnnotationToolboxOpen, setIsAnnotationToolboxOpen] =
     useState<boolean>(true);
   const [useVirtualScroll, setUseVirtualScroll] = useState<boolean>(false);
+  const [toolChangeKey, setToolChangeKey] = useState<number>(0);
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -247,6 +249,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
   // Annotation tool handlers
   const handleAnnotationTool = (tool: string) => {
     setActiveAnnotationTool(tool);
+    setToolChangeKey(prev => prev + 1); // Force re-render of overlay
     setAnnotationTool(tool);
     setIsAnnotationMode(true);
 
@@ -273,6 +276,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
   const toggleAnnotationMode = () => {
     setIsAnnotationMode(!isAnnotationMode);
     if (!isAnnotationMode) {
+      setToolChangeKey(prev => prev + 1);
       setIsAnnotationToolboxOpen(true);
       toast({
         title: "Annotation mode enabled",
@@ -285,6 +289,11 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
 
   const toggleAnnotationToolbox = () =>
     setIsAnnotationToolboxOpen(!isAnnotationToolboxOpen);
+
+  // Memoized annotation change handler to prevent excessive re-renders
+  const handleAnnotationChangeStable = useCallback((newAnnotations: any) => {
+    handleAnnotationChange(newAnnotations);
+  }, []);
 
   const handleAnnotationChange = (newAnnotations: any) => {
     latestAnnotationsRef.current = newAnnotations;
@@ -921,6 +930,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
             {/* Website iframe */}
             <iframe
               ref={iframeRef}
+              key={`iframe-${currentUrl}`}
               src={currentUrl}
               onLoad={handleIframeLoad}
               className="w-full h-full border-0"
@@ -941,6 +951,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
 
             {/* Annotation overlay */}
             <LiveAnnotationOverlay
+              key={`overlay-${toolChangeKey}-${magnetActiveTab}`}
               reviewId={reviewId}
               tabId={magnetActiveTab}
               tabColor={getTabColor(magnetActiveTab)}
@@ -951,7 +962,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
               zoomLevel={isFullscreen ? 1.0 : zoomLevel}
               isVisible={isAnnotationMode}
               iframeRef={iframeRef}
-              onAnnotationChange={handleAnnotationChange}
+              onAnnotationChange={handleAnnotationChangeStable}
               activeTool={activeAnnotationTool}
               selectedColor={annotationTool}
               onToolChange={(tool) => setActiveAnnotationTool(tool)}
@@ -1208,6 +1219,6 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
       </div>
     </div>
   );
-};
+});
 
 export default AnnotationWorkspace;

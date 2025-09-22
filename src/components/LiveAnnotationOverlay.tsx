@@ -94,10 +94,11 @@ const LiveAnnotationOverlay: React.FC<LiveAnnotationOverlayProps> = ({
   const [wheelPassthrough, setWheelPassthrough] = useState(false);
   const wheelTimeoutRef = useRef<number | null>(null);
   const panRaf = useRef<number | null>(null);
+  const isInitializedRef = useRef(false);
 
   // Save canvas state to history
   const saveCanvasState = useCallback(() => {
-    if (fabricCanvasRef.current) {
+    if (fabricCanvasRef.current && isInitializedRef.current) {
       const state = JSON.stringify(fabricCanvasRef.current.toJSON());
       setCanvasHistory((prev) => {
         const newHistory = prev.slice(0, historyIndex + 1);
@@ -108,79 +109,79 @@ const LiveAnnotationOverlay: React.FC<LiveAnnotationOverlayProps> = ({
     }
   }, [historyIndex]);
 
+  // Debounced annotation change handler
+  const debouncedAnnotationChange = useCallback((annotations: any) => {
+    if (emitTimerRef.current) window.clearTimeout(emitTimerRef.current);
+    emitTimerRef.current = window.setTimeout(() => {
+      onAnnotationChange(annotations);
+    }, 300);
+  }, [onAnnotationChange]);
+
   // Initialize Fabric.js canvas
   useEffect(() => {
-    if (canvasRef.current && !fabricCanvasRef.current) {
+    if (canvasRef.current && !fabricCanvasRef.current && isVisible) {
       const canvas = new fabric.Canvas(canvasRef.current, {
         isDrawingMode: false,
         selection: true,
         backgroundColor: "transparent",
         preserveObjectStacking: true,
-        renderOnAddRemove: true,
+        renderOnAddRemove: false, // Prevent automatic re-renders
         stateful: true,
         perPixelTargetFind: true,
+        enableRetinaScaling: false, // Disable for better performance
       });
 
       fabricCanvasRef.current = canvas;
-
       canvas.setWidth(width);
       canvas.setHeight(height);
 
-      canvas.on("object:added", (e) => {
-        if (e.target && !e.target.isType("activeSelection")) {
-          saveCanvasState();
-          if (emitTimerRef.current) window.clearTimeout(emitTimerRef.current);
-          emitTimerRef.current = window.setTimeout(() => {
-            if (fabricCanvasRef.current) {
-              onAnnotationChange(fabricCanvasRef.current.toJSON());
-            }
-          }, 200);
-        }
-      });
-
-      canvas.on("object:modified", () => {
-        saveCanvasState();
-        if (emitTimerRef.current) window.clearTimeout(emitTimerRef.current);
-        emitTimerRef.current = window.setTimeout(() => {
-          if (fabricCanvasRef.current) {
-            onAnnotationChange(fabricCanvasRef.current.toJSON());
+      // Batch canvas events to prevent flickering
+      let eventBatch = false;
+      const batchEvents = () => {
+        if (eventBatch) return;
+        eventBatch = true;
+        requestAnimationFrame(() => {
+          if (fabricCanvasRef.current && isInitializedRef.current) {
+            debouncedAnnotationChange(fabricCanvasRef.current.toJSON());
+            saveCanvasState();
           }
-        }, 200);
-      });
+          eventBatch = false;
+        });
+      };
 
-      canvas.on("object:removed", () => {
-        saveCanvasState();
-        if (emitTimerRef.current) window.clearTimeout(emitTimerRef.current);
-        emitTimerRef.current = window.setTimeout(() => {
-          if (fabricCanvasRef.current) {
-            onAnnotationChange(fabricCanvasRef.current.toJSON());
-          }
-        }, 200);
-      });
+      canvas.on("object:added", batchEvents);
+      canvas.on("object:modified", batchEvents);
+      canvas.on("object:removed", batchEvents);
 
+      // Load initial annotations if provided
       if (initialAnnotations) {
         try {
           canvas.loadFromJSON(initialAnnotations, () => {
             canvas.renderAll();
+            isInitializedRef.current = true;
             saveCanvasState();
           });
         } catch (err) {
-          // ignore bad JSON
+          console.warn("Failed to load initial annotations:", err);
+          isInitializedRef.current = true;
+          saveCanvasState();
         }
       } else {
+        isInitializedRef.current = true;
         saveCanvasState();
       }
 
       return () => {
+        isInitializedRef.current = false;
         canvas.dispose();
         fabricCanvasRef.current = null;
       };
     }
-  }, [initialAnnotations, saveCanvasState, width, height]);
+  }, [width, height, isVisible, initialAnnotations, debouncedAnnotationChange, saveCanvasState]);
 
   // Update canvas dimensions when props change
   useEffect(() => {
-    if (fabricCanvasRef.current) {
+    if (fabricCanvasRef.current && isInitializedRef.current) {
       fabricCanvasRef.current.setWidth(width);
       fabricCanvasRef.current.setHeight(height);
       fabricCanvasRef.current.renderAll();
@@ -190,22 +191,22 @@ const LiveAnnotationOverlay: React.FC<LiveAnnotationOverlayProps> = ({
   // Keep annotations anchored to page while scrolling/zooming
   useEffect(() => {
     const canvas = fabricCanvasRef.current;
-    if (!canvas) return;
+    if (!canvas || !isInitializedRef.current) return;
+    
     if (panRaf.current) {
       cancelAnimationFrame(panRaf.current);
     }
-    const x = scrollLeft;
-    const y = scrollTop;
+    
     panRaf.current = requestAnimationFrame(() => {
-      canvas.setZoom(zoomLevel);
-      const vt = (canvas.viewportTransform || [1, 0, 0, 1, 0, 0]) as number[];
+      const vt = canvas.viewportTransform || [1, 0, 0, 1, 0, 0];
       vt[0] = zoomLevel;
       vt[3] = zoomLevel;
-      vt[4] = -x * zoomLevel;
-      vt[5] = -y * zoomLevel;
+      vt[4] = -scrollLeft * zoomLevel;
+      vt[5] = -scrollTop * zoomLevel;
       canvas.setViewportTransform(vt);
       canvas.requestRenderAll();
     });
+
     return () => {
       if (panRaf.current) {
         cancelAnimationFrame(panRaf.current);
@@ -219,67 +220,66 @@ const LiveAnnotationOverlay: React.FC<LiveAnnotationOverlayProps> = ({
     if (externalActiveTool !== activeTool) {
       setActiveTool(externalActiveTool);
     }
-  }, [externalActiveTool]);
+  }, [externalActiveTool, activeTool]);
 
   useEffect(() => {
     if (externalSelectedColor && externalSelectedColor !== selectedColor) {
       setSelectedColor(externalSelectedColor);
     }
-  }, [externalSelectedColor]);
+  }, [externalSelectedColor, selectedColor]);
 
-  // If initialAnnotations change later (e.g., loaded async), load them
+  // Handle tool changes with proper canvas configuration
   useEffect(() => {
-    if (!fabricCanvasRef.current || !initialAnnotations) return;
-    try {
-      fabricCanvasRef.current.loadFromJSON(initialAnnotations, () => {
-        fabricCanvasRef.current?.renderAll();
-        saveCanvasState();
-      });
-    } catch (err) {
-      // ignore
-    }
-  }, [initialAnnotations, saveCanvasState]);
-
-  // Handle tool changes
-  useEffect(() => {
-    if (!fabricCanvasRef.current) return;
+    if (!fabricCanvasRef.current || !isInitializedRef.current) return;
 
     const canvas = fabricCanvasRef.current;
 
-    canvas.isDrawingMode = activeTool === "pen" || activeTool === "highlighter";
-    canvas.selection = activeTool === "select";
+    // Reset canvas state
+    canvas.isDrawingMode = false;
+    canvas.selection = false;
+    canvas.defaultCursor = "default";
+    canvas.hoverCursor = "move";
+    canvas.moveCursor = "move";
 
-    if (canvas.isDrawingMode) {
-      if (!canvas.freeDrawingBrush) {
+    switch (activeTool) {
+      case "select":
+        canvas.selection = true;
+        canvas.defaultCursor = "default";
+        canvas.hoverCursor = "move";
+        break;
+      
+      case "pen":
+        canvas.isDrawingMode = true;
         canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
-      }
-      if (activeTool === "pen") {
         canvas.freeDrawingBrush.color = selectedColor || tabColor;
         canvas.freeDrawingBrush.width = Math.max(2 / zoomLevel, 1);
-        // @ts-ignore
-        canvas.freeDrawingBrush.shadowBlur = 0;
-      } else if (activeTool === "highlighter") {
+        canvas.defaultCursor = "crosshair";
+        break;
+      
+      case "highlighter":
+        canvas.isDrawingMode = true;
+        canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
         const color = selectedColor || tabColor;
         const rgb = new fabric.Color(color).getSource() as number[];
         const transparentColor = `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.3)`;
         canvas.freeDrawingBrush.color = transparentColor;
         canvas.freeDrawingBrush.width = Math.max(15 / zoomLevel, 8);
-        // @ts-ignore
-        canvas.freeDrawingBrush.shadowBlur = 2;
-      }
-    }
-
-    switch (activeTool) {
-      case "pen":
-      case "highlighter":
         canvas.defaultCursor = "crosshair";
         break;
+      
       case "text":
         canvas.defaultCursor = "text";
         break;
+      
+      case "arrow":
+      case "rectangle":
+        canvas.defaultCursor = "crosshair";
+        break;
+      
       case "eraser":
         canvas.defaultCursor = "grab";
         break;
+      
       default:
         canvas.defaultCursor = "default";
     }
@@ -288,8 +288,8 @@ const LiveAnnotationOverlay: React.FC<LiveAnnotationOverlayProps> = ({
   }, [activeTool, selectedColor, zoomLevel, tabColor, onToolChange]);
 
   // Handle mouse events for custom tools
-  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!fabricCanvasRef.current) return;
+  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!fabricCanvasRef.current || !isInitializedRef.current) return;
 
     if (activeTool !== "select") {
       e.preventDefault();
@@ -299,67 +299,73 @@ const LiveAnnotationOverlay: React.FC<LiveAnnotationOverlayProps> = ({
     const canvas = fabricCanvasRef.current;
     const pointer = canvas.getPointer(e.nativeEvent);
 
-    if (activeTool === "arrow") {
-      setIsDrawing(true);
-      const line = new fabric.Line(
-        [pointer.x, pointer.y, pointer.x, pointer.y],
-        {
+    switch (activeTool) {
+      case "arrow":
+        setIsDrawing(true);
+        const line = new fabric.Line(
+          [pointer.x, pointer.y, pointer.x, pointer.y],
+          {
+            stroke: selectedColor || tabColor,
+            strokeWidth: Math.max(2 / zoomLevel, 1),
+            selectable: true,
+            strokeLineCap: "round",
+          },
+        );
+        canvas.add(line);
+        setCurrentPath(line as unknown as fabric.Path);
+        break;
+      
+      case "rectangle":
+        setIsDrawing(true);
+        const rect = new fabric.Rect({
+          left: pointer.x,
+          top: pointer.y,
+          width: 0,
+          height: 0,
           stroke: selectedColor || tabColor,
           strokeWidth: Math.max(2 / zoomLevel, 1),
+          fill: "transparent",
           selectable: true,
           strokeLineCap: "round",
-        },
-      );
-      canvas.add(line);
-      setCurrentPath(line as unknown as fabric.Path);
-    } else if (activeTool === "rectangle") {
-      setIsDrawing(true);
-      const rect = new fabric.Rect({
-        left: pointer.x,
-        top: pointer.y,
-        width: 0,
-        height: 0,
-        stroke: selectedColor || tabColor,
-        strokeWidth: Math.max(2 / zoomLevel, 1),
-        fill: "transparent",
-        selectable: true,
-        strokeLineCap: "round",
-        strokeLineJoin: "round",
-      });
-      canvas.add(rect);
-      setCurrentPath(rect as unknown as fabric.Path);
-    } else if (activeTool === "text") {
-      const text = new fabric.Textbox("Click to edit text", {
-        left: pointer.x,
-        top: pointer.y,
-        fontSize: Math.max(16 / zoomLevel, 12),
-        fill: selectedColor || tabColor,
-        width: Math.max(200 / zoomLevel, 150),
-        selectable: true,
-        editable: true,
-        fontFamily: "Arial, sans-serif",
-        textAlign: "left",
-      });
-      fabricCanvasRef.current.add(text);
-      fabricCanvasRef.current.setActiveObject(text);
-      text.enterEditing();
-      text.selectAll();
-    } else if (activeTool === "eraser") {
-      const target = canvas.findTarget(e.nativeEvent, false);
-      if (target && target !== canvas.backgroundImage) {
-        canvas.remove(target);
-        canvas.renderAll();
-      }
+          strokeLineJoin: "round",
+        });
+        canvas.add(rect);
+        setCurrentPath(rect as unknown as fabric.Path);
+        break;
+      
+      case "text":
+        const text = new fabric.Textbox("Click to edit text", {
+          left: pointer.x,
+          top: pointer.y,
+          fontSize: Math.max(16 / zoomLevel, 12),
+          fill: selectedColor || tabColor,
+          width: Math.max(200 / zoomLevel, 150),
+          selectable: true,
+          editable: true,
+          fontFamily: "Arial, sans-serif",
+          textAlign: "left",
+        });
+        canvas.add(text);
+        canvas.setActiveObject(text);
+        text.enterEditing();
+        text.selectAll();
+        break;
+      
+      case "eraser":
+        const target = canvas.findTarget(e.nativeEvent, false);
+        if (target && target !== canvas.backgroundImage) {
+          canvas.remove(target);
+          canvas.renderAll();
+        }
+        break;
     }
-  };
+  }, [activeTool, selectedColor, tabColor, zoomLevel]);
 
-  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDrawing || !currentPath || !fabricCanvasRef.current) return;
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isDrawing || !currentPath || !fabricCanvasRef.current || !isInitializedRef.current) return;
 
-    if (isDrawing) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
+    e.preventDefault();
+    e.stopPropagation();
 
     const canvas = fabricCanvasRef.current;
     const pointer = canvas.getPointer(e.nativeEvent);
@@ -386,10 +392,10 @@ const LiveAnnotationOverlay: React.FC<LiveAnnotationOverlayProps> = ({
     }
 
     canvas.renderAll();
-  };
+  }, [isDrawing, currentPath, activeTool]);
 
-  const handleMouseUp = () => {
-    if (!isDrawing || !currentPath || !fabricCanvasRef.current) return;
+  const handleMouseUp = useCallback(() => {
+    if (!isDrawing || !currentPath || !fabricCanvasRef.current || !isInitializedRef.current) return;
 
     const canvas = fabricCanvasRef.current;
 
@@ -444,17 +450,19 @@ const LiveAnnotationOverlay: React.FC<LiveAnnotationOverlayProps> = ({
 
     setIsDrawing(false);
     setCurrentPath(null);
+    
+    // Trigger annotation change after drawing is complete
     if (emitTimerRef.current) window.clearTimeout(emitTimerRef.current);
     emitTimerRef.current = window.setTimeout(() => {
-      if (fabricCanvasRef.current) {
-        onAnnotationChange(fabricCanvasRef.current.toJSON());
+      if (fabricCanvasRef.current && isInitializedRef.current) {
+        debouncedAnnotationChange(fabricCanvasRef.current.toJSON());
       }
     }, 150);
-  };
+  }, [isDrawing, currentPath, activeTool, selectedColor, tabColor, zoomLevel, debouncedAnnotationChange]);
 
   // Undo/Redo/Clear
   const handleUndo = useCallback(() => {
-    if (historyIndex > 0 && fabricCanvasRef.current) {
+    if (historyIndex > 0 && fabricCanvasRef.current && isInitializedRef.current) {
       const prevState = canvasHistory[historyIndex - 1];
       fabricCanvasRef.current.loadFromJSON(prevState, () => {
         fabricCanvasRef.current?.renderAll();
@@ -464,7 +472,7 @@ const LiveAnnotationOverlay: React.FC<LiveAnnotationOverlayProps> = ({
   }, [canvasHistory, historyIndex]);
 
   const handleRedo = useCallback(() => {
-    if (historyIndex < canvasHistory.length - 1 && fabricCanvasRef.current) {
+    if (historyIndex < canvasHistory.length - 1 && fabricCanvasRef.current && isInitializedRef.current) {
       const nextState = canvasHistory[historyIndex + 1];
       fabricCanvasRef.current.loadFromJSON(nextState, () => {
         fabricCanvasRef.current?.renderAll();
@@ -474,23 +482,20 @@ const LiveAnnotationOverlay: React.FC<LiveAnnotationOverlayProps> = ({
   }, [canvasHistory, historyIndex]);
 
   const handleClearCanvas = useCallback(() => {
-    if (fabricCanvasRef.current) {
+    if (fabricCanvasRef.current && isInitializedRef.current) {
       fabricCanvasRef.current.clear();
       fabricCanvasRef.current.backgroundColor = "transparent";
       fabricCanvasRef.current.renderAll();
       saveCanvasState();
-      if (emitTimerRef.current) window.clearTimeout(emitTimerRef.current);
-      emitTimerRef.current = window.setTimeout(() => {
-        if (fabricCanvasRef.current) {
-          onAnnotationChange(fabricCanvasRef.current.toJSON());
-        }
-      }, 200);
+      debouncedAnnotationChange({});
     }
-  }, [saveCanvasState, onAnnotationChange]);
+  }, [saveCanvasState, debouncedAnnotationChange]);
 
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (!isVisible || !isInitializedRef.current) return;
+
       if (e.ctrlKey || e.metaKey) {
         switch (e.key) {
           case "z":
@@ -531,12 +536,27 @@ const LiveAnnotationOverlay: React.FC<LiveAnnotationOverlayProps> = ({
     };
   }, [isVisible, handleUndo, handleRedo]);
 
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (emitTimerRef.current) {
+        window.clearTimeout(emitTimerRef.current);
+      }
+      if (wheelTimeoutRef.current) {
+        window.clearTimeout(wheelTimeoutRef.current);
+      }
+      if (panRaf.current) {
+        cancelAnimationFrame(panRaf.current);
+      }
+    };
+  }, []);
+
   if (!isVisible) {
     return null;
   }
 
   // Wheel handler on the WRAPPER
-  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+  const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
     if (activeTool === "select") return;
 
     if (useVirtualScroll) {
@@ -555,7 +575,7 @@ const LiveAnnotationOverlay: React.FC<LiveAnnotationOverlayProps> = ({
     wheelTimeoutRef.current = window.setTimeout(() => {
       setWheelPassthrough(false);
     }, 1200);
-  };
+  }, [activeTool, useVirtualScroll, zoomLevel, onScrollDelta]);
 
   const wrapperPointerEvents =
     activeTool === "select" || (!useVirtualScroll && wheelPassthrough)
@@ -569,8 +589,7 @@ const LiveAnnotationOverlay: React.FC<LiveAnnotationOverlayProps> = ({
       style={{
         width,
         height,
-        pointerEvents:
-          wrapperPointerEvents as React.CSSProperties["pointerEvents"],
+        pointerEvents: wrapperPointerEvents as React.CSSProperties["pointerEvents"],
       }}
       onWheel={handleWheel}
     >
