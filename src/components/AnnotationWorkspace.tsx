@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   Laptop,
   Smartphone,
@@ -158,6 +158,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
   const [annotations, setAnnotations] = useState<any>(null);
   const [isAnnotationToolboxOpen, setIsAnnotationToolboxOpen] =
     useState<boolean>(true);
+  const [useVirtualScroll, setUseVirtualScroll] = useState<boolean>(false);
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -166,11 +167,9 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
     deviceSizes.find((device) => device.id === selectedDevice) ||
     deviceSizes[1];
 
-  // Calculate scaled dimensions
   const scaledWidth = Math.round(currentDevice.width * zoomLevel);
   const scaledHeight = Math.round(currentDevice.height * zoomLevel);
 
-  // Handle URL navigation
   const navigateToUrl = () => {
     if (inputUrl) {
       setIsLoading(true);
@@ -209,7 +208,6 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
   const handleRefresh = () => {
     setIsLoading(true);
     if (iframeRef.current) {
-      // Force a complete reload by setting src to empty first
       iframeRef.current.src = "about:blank";
       setTimeout(() => {
         if (iframeRef.current) {
@@ -219,13 +217,8 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
     }
   };
 
-  const toggleFullscreen = () => {
-    setIsFullscreen(!isFullscreen);
-  };
-
-  const toggleMagnetPanel = () => {
-    setIsMagnetPanelOpen(!isMagnetPanelOpen);
-  };
+  const toggleFullscreen = () => setIsFullscreen(!isFullscreen);
+  const toggleMagnetPanel = () => setIsMagnetPanelOpen(!isMagnetPanelOpen);
 
   const handleMagnetTabChange = (tabId: string) => {
     setMagnetActiveTab(tabId);
@@ -247,9 +240,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
     }
   };
 
-  const handleZoomReset = () => {
-    setZoomLevel(1.0);
-  };
+  const handleZoomReset = () => setZoomLevel(1.0);
 
   // Annotation tool handlers
   const handleAnnotationTool = (tool: string) => {
@@ -257,7 +248,6 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
     setAnnotationTool(tool);
     setIsAnnotationMode(true);
 
-    // Provide user feedback about tool behavior
     const toolMessages = {
       select: "Select mode - you can interact with the website normally",
       pen: "Pen tool - click and drag to draw on the website",
@@ -266,18 +256,18 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
       arrow: "Arrow tool - click and drag to draw arrows",
       rectangle: "Rectangle tool - click and drag to draw rectangles",
       eraser: "Eraser tool - click on annotations to remove them",
-    };
+    } as const;
 
     toast({
       title: `${tool.charAt(0).toUpperCase() + tool.slice(1)} tool selected`,
       description:
-        toolMessages[tool as keyof typeof toolMessages] ||
+        // @ts-ignore
+        toolMessages[tool] ||
         `You can now use the ${tool} tool to annotate the website.`,
       duration: 3000,
     });
   };
 
-  // Toggle annotation mode
   const toggleAnnotationMode = () => {
     setIsAnnotationMode(!isAnnotationMode);
     if (!isAnnotationMode) {
@@ -291,14 +281,11 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
     }
   };
 
-  const toggleAnnotationToolbox = () => {
+  const toggleAnnotationToolbox = () =>
     setIsAnnotationToolboxOpen(!isAnnotationToolboxOpen);
-  };
 
-  // Handle annotation changes
   const handleAnnotationChange = (newAnnotations: any) => {
     setAnnotations(newAnnotations);
-    // Auto-save annotations to localStorage
     try {
       const storageKey = `annotations-${projectId}-${reviewId}-${magnetActiveTab}`;
       localStorage.setItem(storageKey, JSON.stringify(newAnnotations));
@@ -320,42 +307,30 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
     }
   }, [projectId, reviewId, magnetActiveTab]);
 
-  // Screen capture handler
+  // Screen capture handler (placeholder)
   const handleScreenCapture = async () => {
     try {
-      // Show loading toast
       toast({
         title: "Capturing screenshot",
         description: "Please wait while we capture the current view...",
         duration: 2000,
       });
-
-      // Use html2canvas or similar approach for cross-origin iframe capture
       if (iframeRef.current) {
-        // For demo purposes, we'll create a canvas with the iframe dimensions
         const canvas = document.createElement("canvas");
         const ctx = canvas.getContext("2d");
-
         if (ctx) {
-          // Set canvas dimensions to match the iframe
           canvas.width = currentDevice.width;
           canvas.height = currentDevice.height;
-
-          // In a real implementation, we would use html2canvas or a similar library
-          // to capture the iframe content, but for now we'll simulate it
           ctx.fillStyle = "#ffffff";
           ctx.fillRect(0, 0, canvas.width, canvas.height);
           ctx.font = "20px Arial";
           ctx.fillStyle = "#000000";
           ctx.fillText(`Screenshot of ${currentUrl}`, 20, 40);
           ctx.fillText(`Captured at ${new Date().toLocaleString()}`, 20, 70);
-
-          // Create download link
           const link = document.createElement("a");
           link.download = `screenshot-${Date.now()}.png`;
           link.href = canvas.toDataURL();
           link.click();
-
           toast({
             title: "Screenshot captured",
             description:
@@ -379,16 +354,11 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
   // Screen recording handlers
   const startRecording = async () => {
     try {
-      // Request screen capture permission
-      const stream = await navigator.mediaDevices.getDisplayMedia({
+      const stream = await (navigator.mediaDevices as any).getDisplayMedia({
         video: { mediaSource: "screen" },
         audio: true,
       });
-
-      // Handle user canceling the screen selection dialog
-      if (!stream) {
-        return;
-      }
+      if (!stream) return;
 
       const recorder = new MediaRecorder(stream, {
         mimeType: MediaRecorder.isTypeSupported("video/webm; codecs=vp9")
@@ -397,15 +367,9 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
       });
 
       const chunks: BlobPart[] = [];
-
-      // Listen for data available event
       recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          chunks.push(event.data);
-        }
+        if (event.data.size > 0) chunks.push(event.data);
       };
-
-      // Listen for stream end events
       stream.getVideoTracks()[0].onended = () => {
         if (recorder && recorder.state !== "inactive") {
           recorder.stop();
@@ -413,25 +377,17 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
           setMediaRecorder(null);
         }
       };
-
-      // Handle recording stop
       recorder.onstop = () => {
-        // Create a blob from the recorded chunks
         const blob = new Blob(chunks, { type: "video/webm" });
         const url = URL.createObjectURL(blob);
-
-        // Create and trigger download
         const link = document.createElement("a");
         link.href = url;
         link.download = `magnet-review-${Date.now()}.webm`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-
-        // Clean up
         URL.revokeObjectURL(url);
-        stream.getTracks().forEach((track) => track.stop());
-
+        stream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
         toast({
           title: "Recording saved",
           description:
@@ -440,11 +396,9 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
         });
       };
 
-      // Start recording with 1 second chunks
       recorder.start(1000);
       setMediaRecorder(recorder);
       setIsRecording(true);
-
       toast({
         title: "Recording started",
         description:
@@ -468,7 +422,6 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
       mediaRecorder.stop();
       setIsRecording(false);
       setMediaRecorder(null);
-
       toast({
         title: "Recording stopped",
         description: "Processing your recording...",
@@ -477,33 +430,21 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
     }
   };
 
-  // Handle iframe load event
+  // Iframe load
   const handleIframeLoad = () => {
     setIsLoading(false);
-
-    // Try to get the current URL from the iframe
     try {
       if (iframeRef.current && iframeRef.current.contentWindow) {
         const iframeUrl = iframeRef.current.contentWindow.location.href;
         setInputUrl(iframeUrl);
         setCurrentUrl(iframeUrl);
-
-        // Prevent infinite reloads by checking if the URL has changed unexpectedly
-        if (iframeUrl !== currentUrl && !iframeUrl.includes("about:blank")) {
-          console.log("URL changed to:", iframeUrl);
-        }
       }
     } catch (error) {
-      // Cross-origin restrictions might prevent accessing the URL
-      console.log(
-        "Could not access iframe URL due to cross-origin restrictions",
-      );
+      // cross-origin
     }
 
-    // Add error handling for problematic websites
     try {
       if (iframeRef.current && iframeRef.current.contentWindow) {
-        // Prevent the iframe from navigating the parent window
         iframeRef.current.contentWindow.addEventListener(
           "beforeunload",
           (e) => {
@@ -511,28 +452,21 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
             return false;
           },
         );
-
-        // Prevent popup behavior that might cause reloading
         iframeRef.current.contentWindow.addEventListener("error", (e) => {
-          console.log("Iframe content error prevented:", e);
-          e.preventDefault();
+          // @ts-ignore
+          e.preventDefault?.();
         });
       }
     } catch (error) {
-      console.log(
-        "Could not add iframe event listeners due to cross-origin restrictions",
-      );
+      // cross-origin
     }
   };
 
-  // Enhanced iframe scroll events with polling fallback for cross-origin sites
+  // Enhanced iframe scroll events with cross-origin fallback
   useEffect(() => {
     let scrollListener: (() => void) | null = null;
-    let scrollPollInterval: NodeJS.Timeout | null = null;
-    let lastScrollX = 0;
-    let lastScrollY = 0;
-    let isIframeReady = false;
     let rafId: number | null = null;
+
     const scheduleUpdate = (x: number, y: number) => {
       if (rafId) cancelAnimationFrame(rafId);
       rafId = requestAnimationFrame(() => {
@@ -542,70 +476,48 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
 
     const handleIframeScroll = () => {
       try {
-        if (
-          iframeRef.current &&
-          iframeRef.current.contentWindow &&
-          isIframeReady
-        ) {
+        if (iframeRef.current && iframeRef.current.contentWindow) {
           const { scrollX, scrollY } = iframeRef.current.contentWindow;
-          if (scrollX !== lastScrollX || scrollY !== lastScrollY) {
-            lastScrollX = scrollX;
-            lastScrollY = scrollY;
-            scheduleUpdate(scrollX, scrollY);
-          }
+          scheduleUpdate(scrollX, scrollY);
         }
       } catch (error) {
-        // Cross-origin restrictions might prevent accessing scroll position
-        // Use polling as fallback
+        // If we cannot read scroll, we rely on virtual scroll (wheel capture from overlay)
       }
     };
 
-    // Wait for iframe to be ready before setting up scroll tracking
     const setupScrollTracking = () => {
       try {
         if (iframeRef.current && iframeRef.current.contentWindow) {
-          // Test if we can access the content window
-          const testAccess = iframeRef.current.contentWindow.location;
+          // Access test (throws if cross-origin)
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const test = iframeRef.current.contentWindow.location.href;
 
-          // If we get here, we have access - set up direct event listener
+          // Same-origin: direct scroll listener
           iframeRef.current.contentWindow.addEventListener(
             "scroll",
             handleIframeScroll,
             { passive: true },
           );
           scrollListener = handleIframeScroll;
-          isIframeReady = true;
-
-          // Initial scroll position check
+          setUseVirtualScroll(false);
           handleIframeScroll();
         }
       } catch (error) {
-        // Cross-origin restrictions - use polling fallback
-        console.log(
-          "Using polling fallback for scroll tracking due to cross-origin restrictions",
-        );
-        isIframeReady = true;
-        scrollPollInterval = setInterval(handleIframeScroll, 50); // More frequent polling
+        // Cross-origin: enable virtual scroll mode
+        setUseVirtualScroll(true);
       }
     };
 
-    // Set up scroll tracking after a short delay to ensure iframe is loaded
     const timeoutId = setTimeout(setupScrollTracking, 500);
 
-    // Handle iframe resize events to reposition annotations
     const handleResize = () => {
-      if (iframeRef.current && isIframeReady) {
-        // Force a scroll position update on resize
-        handleIframeScroll();
-      }
+      if (!useVirtualScroll) handleIframeScroll();
     };
 
     window.addEventListener("resize", handleResize);
 
-    // Cleanup function
     return () => {
       clearTimeout(timeoutId);
-
       if (scrollListener) {
         try {
           if (iframeRef.current && iframeRef.current.contentWindow) {
@@ -615,33 +527,31 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
             );
           }
         } catch (error) {
-          console.log(
-            "Could not remove scroll listener due to cross-origin restrictions",
-          );
+          // ignore
         }
       }
-
-      if (scrollPollInterval) {
-        clearInterval(scrollPollInterval);
-      }
-
       window.removeEventListener("resize", handleResize);
-      if (rafId) {
-        cancelAnimationFrame(rafId);
-        rafId = null;
-      }
+      if (rafId) cancelAnimationFrame(rafId);
     };
-  }, [currentUrl, isLoading]);
+  }, [currentUrl, isLoading, useVirtualScroll]);
 
-  // Get color for MAGNET tab
+  // Receive scroll deltas from overlay in virtual mode
+  const handleOverlayScrollDelta = (dx: number, dy: number) => {
+    if (!useVirtualScroll) return;
+    setScrollPosition((prev) => ({
+      x: Math.max(0, prev.x + dx),
+      y: Math.max(0, prev.y + dy),
+    }));
+  };
+
   const getTabColor = (tabId: string) => {
     const colors: Record<string, string> = {
-      M: "#ef4444", // Red
-      A: "#3b82f6", // Blue
-      G: "#eab308", // Yellow
-      N: "#22c55e", // Green
-      E: "#a855f7", // Purple
-      T: "#f97316", // Orange
+      M: "#ef4444",
+      A: "#3b82f6",
+      G: "#eab308",
+      N: "#22c55e",
+      E: "#a855f7",
+      T: "#f97316",
     };
     return colors[tabId] || "#22c55e";
   };
@@ -651,9 +561,8 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
       className="flex flex-col w-full h-full bg-background"
       ref={containerRef}
     >
-      {/* Consolidated Navigation Bar */}
+      {/* Top Bar */}
       <div className="flex items-center gap-2 p-2 border-b bg-background">
-        {/* App Navigation */}
         <div className="flex items-center gap-1">
           <h1 className="text-lg font-bold mr-3">MAGNET Review</h1>
           <TooltipProvider>
@@ -693,7 +602,6 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
         </div>
 
         {/* Browser Controls */}
-        {/* Left side - Browser controls */}
         <div className="flex items-center gap-1">
           <TooltipProvider>
             <Tooltip>
@@ -729,7 +637,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
           </TooltipProvider>
         </div>
 
-        {/* URL input - more compact */}
+        {/* URL input */}
         <div className="flex items-center flex-1 max-w-md mx-2">
           <input
             type="text"
@@ -791,7 +699,6 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
 
         {/* Annotation & Review Tools */}
         <div className="flex items-center">
-          {/* MAGNET Review Panel Toggle */}
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -811,7 +718,6 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
             </Tooltip>
           </TooltipProvider>
 
-          {/* Annotation Mode Toggle */}
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -873,27 +779,27 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
                 Capture Screenshot
               </DropdownMenuItem>
               <DropdownMenuItem
-                onClick={() => {
+                onClick={() =>
                   toast({
                     title: "Coming soon",
                     description:
                       "Area capture will be available in a future update.",
                     duration: 3000,
-                  });
-                }}
+                  })
+                }
               >
                 <Square className="h-4 w-4 mr-2" />
                 Capture Area
               </DropdownMenuItem>
               <DropdownMenuItem
-                onClick={() => {
+                onClick={() =>
                   toast({
                     title: "Coming soon",
                     description:
                       "Element capture will be available in a future update.",
                     duration: 3000,
-                  });
-                }}
+                  })
+                }
               >
                 <Circle className="h-4 w-4 mr-2" />
                 Capture Element
@@ -918,14 +824,14 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
                     Start Recording
                   </DropdownMenuItem>
                   <DropdownMenuItem
-                    onClick={() => {
+                    onClick={() =>
                       toast({
                         title: "Coming soon",
                         description:
                           "Area recording will be available in a future update.",
                         duration: 3000,
-                      });
-                    }}
+                      })
+                    }
                   >
                     <Square className="h-4 w-4 mr-2" />
                     Record Area
@@ -983,6 +889,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
           </TooltipProvider>
         </div>
       </div>
+
       {/* Viewport container */}
       <div className="relative flex-1">
         <div
@@ -999,7 +906,6 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
               transform: isFullscreen ? "none" : `scale(1)`,
             }}
           >
-            {/* Loading indicator */}
             {isLoading && (
               <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10">
                 <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
@@ -1044,6 +950,9 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
               selectedColor={annotationTool}
               onToolChange={(tool) => setActiveAnnotationTool(tool)}
               onColorChange={(color) => setAnnotationTool(color)}
+              initialAnnotations={annotations}
+              onScrollDelta={handleOverlayScrollDelta}
+              useVirtualScroll={useVirtualScroll}
             />
           </div>
         </div>
@@ -1051,16 +960,12 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
         {/* Floating MAGNET Review Panel */}
         {isMagnetPanelOpen && (
           <>
-            {/* Backdrop */}
             <div
               className="absolute inset-0 bg-black/20 z-40"
               onClick={toggleMagnetPanel}
             />
-
-            {/* Floating Panel */}
             <div className="absolute left-4 top-4 bottom-4 w-[380px] z-50 animate-in slide-in-from-left-4 duration-300">
               <div className="bg-background border rounded-lg shadow-2xl h-full flex flex-col">
-                {/* Panel Header */}
                 <div className="flex items-center justify-between p-4 border-b">
                   <h2 className="text-lg font-semibold">MAGNET Review</h2>
                   <Button
@@ -1072,8 +977,6 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
                     <X className="h-4 w-4" />
                   </Button>
                 </div>
-
-                {/* Panel Content */}
                 <div className="flex-1 overflow-hidden">
                   <MagnetReviewPanel
                     activeTab={magnetActiveTab}
@@ -1110,13 +1013,10 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
             className={`absolute ${isMagnetPanelOpen ? "left-[400px]" : "left-4"} top-1/2 transform -translate-y-1/2 z-50 animate-in slide-in-from-left-4 duration-300`}
           >
             <div className="bg-background/95 backdrop-blur-sm border rounded-lg shadow-2xl p-3 w-[70px]">
-              {/* Toolbox Header */}
               <div className="text-xs font-medium text-muted-foreground mb-2 text-center">
                 Tools
               </div>
-
               <TooltipProvider>
-                {/* Tool Selection - Vertical Stack */}
                 <div className="flex flex-col gap-2 mb-3">
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -1284,11 +1184,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
                         <TooltipTrigger asChild>
                           <button
                             onClick={() => setAnnotationTool(color.value)}
-                            className={`w-8 h-8 rounded-full border-2 transition-all hover:scale-110 ${
-                              annotationTool === color.value
-                                ? "border-foreground shadow-md"
-                                : "border-border"
-                            }`}
+                            className={`w-8 h-8 rounded-full border-2 transition-all hover:scale-110 ${annotationTool === color.value ? "border-foreground shadow-md" : "border-border"}`}
                             style={{ backgroundColor: color.value }}
                           />
                         </TooltipTrigger>

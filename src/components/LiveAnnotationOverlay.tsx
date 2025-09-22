@@ -38,6 +38,10 @@ interface LiveAnnotationOverlayProps {
   selectedColor?: string;
   onToolChange?: (tool: string) => void;
   onColorChange?: (color: string) => void;
+  initialAnnotations?: any;
+  // New: virtual scroll bridge for cross-origin fallback
+  onScrollDelta?: (dx: number, dy: number) => void;
+  useVirtualScroll?: boolean;
 }
 
 // Predefined colors for annotation tools
@@ -55,7 +59,7 @@ const ANNOTATION_COLORS = [
 const LiveAnnotationOverlay: React.FC<LiveAnnotationOverlayProps> = ({
   reviewId = "default-review",
   tabId = "M",
-  tabColor = "#22c55e", // Default to green if no color provided
+  tabColor = "#22c55e",
   width = 1200,
   height = 800,
   scrollTop = 0,
@@ -68,6 +72,9 @@ const LiveAnnotationOverlay: React.FC<LiveAnnotationOverlayProps> = ({
   selectedColor: externalSelectedColor,
   onToolChange = () => {},
   onColorChange = () => {},
+  initialAnnotations,
+  onScrollDelta,
+  useVirtualScroll = false,
 }) => {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -82,7 +89,7 @@ const LiveAnnotationOverlay: React.FC<LiveAnnotationOverlayProps> = ({
   const [historyIndex, setHistoryIndex] = useState<number>(-1);
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
 
-  // Wheel passthrough for smooth scrolling while tools are active
+  // Wheel passthrough for smooth scrolling while tools are active (only when not using virtual scroll)
   const [wheelPassthrough, setWheelPassthrough] = useState(false);
   const wheelTimeoutRef = useRef<number | null>(null);
   const panRaf = useRef<number | null>(null);
@@ -94,7 +101,7 @@ const LiveAnnotationOverlay: React.FC<LiveAnnotationOverlayProps> = ({
       setCanvasHistory((prev) => {
         const newHistory = prev.slice(0, historyIndex + 1);
         newHistory.push(state);
-        return newHistory.slice(-50); // Keep only last 50 states
+        return newHistory.slice(-50);
       });
       setHistoryIndex((prev) => Math.min(prev + 1, 49));
     }
@@ -110,15 +117,14 @@ const LiveAnnotationOverlay: React.FC<LiveAnnotationOverlayProps> = ({
         preserveObjectStacking: true,
         renderOnAddRemove: true,
         stateful: true,
+        perPixelTargetFind: true,
       });
 
       fabricCanvasRef.current = canvas;
 
-      // Set canvas dimensions
       canvas.setWidth(width);
       canvas.setHeight(height);
 
-      // Enhanced event handling
       canvas.on("object:added", (e) => {
         if (e.target && !e.target.isType("activeSelection")) {
           saveCanvasState();
@@ -145,16 +151,25 @@ const LiveAnnotationOverlay: React.FC<LiveAnnotationOverlayProps> = ({
         }
       });
 
-      // Save initial empty state
-      saveCanvasState();
+      if (initialAnnotations) {
+        try {
+          canvas.loadFromJSON(initialAnnotations, () => {
+            canvas.renderAll();
+            saveCanvasState();
+          });
+        } catch (err) {
+          // ignore bad JSON
+        }
+      } else {
+        saveCanvasState();
+      }
 
-      // Clean up on unmount
       return () => {
         canvas.dispose();
         fabricCanvasRef.current = null;
       };
     }
-  }, [saveCanvasState]);
+  }, [initialAnnotations, saveCanvasState, width, height]);
 
   // Update canvas dimensions when props change
   useEffect(() => {
@@ -165,26 +180,24 @@ const LiveAnnotationOverlay: React.FC<LiveAnnotationOverlayProps> = ({
     }
   }, [width, height]);
 
-  // Update canvas zoom when zoom level changes
+  // Keep annotations anchored to page while scrolling/zooming
   useEffect(() => {
-    if (fabricCanvasRef.current) {
-      fabricCanvasRef.current.setZoom(zoomLevel);
-      fabricCanvasRef.current.renderAll();
-    }
-  }, [zoomLevel]);
-
-  // Enhanced canvas position update when scroll changes (RAF-coalesced)
-  useEffect(() => {
-    if (!fabricCanvasRef.current) return;
+    const canvas = fabricCanvasRef.current;
+    if (!canvas) return;
     if (panRaf.current) {
       cancelAnimationFrame(panRaf.current);
     }
     const x = scrollLeft;
     const y = scrollTop;
     panRaf.current = requestAnimationFrame(() => {
-      if (!fabricCanvasRef.current) return;
-      fabricCanvasRef.current.absolutePan(new fabric.Point(x, y));
-      fabricCanvasRef.current.requestRenderAll();
+      canvas.setZoom(zoomLevel);
+      const vt = (canvas.viewportTransform || [1, 0, 0, 1, 0, 0]) as number[];
+      vt[0] = zoomLevel;
+      vt[3] = zoomLevel;
+      vt[4] = -x * zoomLevel;
+      vt[5] = -y * zoomLevel;
+      canvas.setViewportTransform(vt);
+      canvas.requestRenderAll();
     });
     return () => {
       if (panRaf.current) {
@@ -192,7 +205,7 @@ const LiveAnnotationOverlay: React.FC<LiveAnnotationOverlayProps> = ({
         panRaf.current = null;
       }
     };
-  }, [scrollTop, scrollLeft]);
+  }, [scrollTop, scrollLeft, zoomLevel]);
 
   // Sync with external tool and color props
   useEffect(() => {
@@ -207,17 +220,28 @@ const LiveAnnotationOverlay: React.FC<LiveAnnotationOverlayProps> = ({
     }
   }, [externalSelectedColor]);
 
+  // If initialAnnotations change later (e.g., loaded async), load them
+  useEffect(() => {
+    if (!fabricCanvasRef.current || !initialAnnotations) return;
+    try {
+      fabricCanvasRef.current.loadFromJSON(initialAnnotations, () => {
+        fabricCanvasRef.current?.renderAll();
+        saveCanvasState();
+      });
+    } catch (err) {
+      // ignore
+    }
+  }, [initialAnnotations, saveCanvasState]);
+
   // Handle tool changes
   useEffect(() => {
     if (!fabricCanvasRef.current) return;
 
     const canvas = fabricCanvasRef.current;
 
-    // Reset canvas mode based on active tool
     canvas.isDrawingMode = activeTool === "pen" || activeTool === "highlighter";
     canvas.selection = activeTool === "select";
 
-    // Configure brush settings based on tool
     if (canvas.isDrawingMode) {
       if (!canvas.freeDrawingBrush) {
         canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
@@ -225,7 +249,7 @@ const LiveAnnotationOverlay: React.FC<LiveAnnotationOverlayProps> = ({
       if (activeTool === "pen") {
         canvas.freeDrawingBrush.color = selectedColor || tabColor;
         canvas.freeDrawingBrush.width = Math.max(2 / zoomLevel, 1);
-        // @ts-ignore - shadowBlur is available on brush instances in fabric
+        // @ts-ignore
         canvas.freeDrawingBrush.shadowBlur = 0;
       } else if (activeTool === "highlighter") {
         const color = selectedColor || tabColor;
@@ -238,11 +262,8 @@ const LiveAnnotationOverlay: React.FC<LiveAnnotationOverlayProps> = ({
       }
     }
 
-    // Update cursor based on tool
     switch (activeTool) {
       case "pen":
-        canvas.defaultCursor = "crosshair";
-        break;
       case "highlighter":
         canvas.defaultCursor = "crosshair";
         break;
@@ -263,7 +284,6 @@ const LiveAnnotationOverlay: React.FC<LiveAnnotationOverlayProps> = ({
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!fabricCanvasRef.current) return;
 
-    // Don't prevent default for select tool to allow iframe interaction
     if (activeTool !== "select") {
       e.preventDefault();
       e.stopPropagation();
@@ -274,7 +294,6 @@ const LiveAnnotationOverlay: React.FC<LiveAnnotationOverlayProps> = ({
 
     if (activeTool === "arrow") {
       setIsDrawing(true);
-      // Start arrow with just a line
       const line = new fabric.Line(
         [pointer.x, pointer.y, pointer.x, pointer.y],
         {
@@ -288,7 +307,6 @@ const LiveAnnotationOverlay: React.FC<LiveAnnotationOverlayProps> = ({
       setCurrentPath(line as unknown as fabric.Path);
     } else if (activeTool === "rectangle") {
       setIsDrawing(true);
-      // Start rectangle
       const rect = new fabric.Rect({
         left: pointer.x,
         top: pointer.y,
@@ -304,7 +322,6 @@ const LiveAnnotationOverlay: React.FC<LiveAnnotationOverlayProps> = ({
       canvas.add(rect);
       setCurrentPath(rect as unknown as fabric.Path);
     } else if (activeTool === "text") {
-      // Add text box at click position
       const text = new fabric.Textbox("Click to edit text", {
         left: pointer.x,
         top: pointer.y,
@@ -321,7 +338,6 @@ const LiveAnnotationOverlay: React.FC<LiveAnnotationOverlayProps> = ({
       text.enterEditing();
       text.selectAll();
     } else if (activeTool === "eraser") {
-      // Find and remove object under pointer
       const target = canvas.findTarget(e.nativeEvent, false);
       if (target && target !== canvas.backgroundImage) {
         canvas.remove(target);
@@ -333,7 +349,6 @@ const LiveAnnotationOverlay: React.FC<LiveAnnotationOverlayProps> = ({
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!isDrawing || !currentPath || !fabricCanvasRef.current) return;
 
-    // Only prevent default when actively drawing
     if (isDrawing) {
       e.preventDefault();
       e.stopPropagation();
@@ -343,14 +358,12 @@ const LiveAnnotationOverlay: React.FC<LiveAnnotationOverlayProps> = ({
     const pointer = canvas.getPointer(e.nativeEvent);
 
     if (activeTool === "arrow") {
-      // Update arrow line
       const line = currentPath as unknown as fabric.Line;
       line.set({
         x2: pointer.x,
         y2: pointer.y,
       });
     } else if (activeTool === "rectangle") {
-      // Update rectangle dimensions
       const rect = currentPath as unknown as fabric.Rect;
       const startX = rect.left || 0;
       const startY = rect.top || 0;
@@ -374,19 +387,15 @@ const LiveAnnotationOverlay: React.FC<LiveAnnotationOverlayProps> = ({
     const canvas = fabricCanvasRef.current;
 
     if (activeTool === "arrow") {
-      // Complete arrow by adding arrowhead
       const line = currentPath as unknown as fabric.Line;
       const x1 = line.x1 || 0;
       const y1 = line.y1 || 0;
       const x2 = line.x2 || 0;
       const y2 = line.y2 || 0;
 
-      // Calculate angle for arrowhead
       const angle = Math.atan2(y2 - y1, x2 - x1);
-
-      // Create arrowhead
       const headLength = 15;
-      const headAngle = Math.PI / 6; // 30 degrees
+      const headAngle = Math.PI / 6;
 
       const arrowhead1 = new fabric.Line(
         [
@@ -418,7 +427,6 @@ const LiveAnnotationOverlay: React.FC<LiveAnnotationOverlayProps> = ({
         },
       );
 
-      // Group the line and arrowheads
       const arrow = new fabric.Group([line, arrowhead1, arrowhead2], {
         selectable: true,
       });
@@ -432,7 +440,7 @@ const LiveAnnotationOverlay: React.FC<LiveAnnotationOverlayProps> = ({
     onAnnotationChange(canvas.toJSON());
   };
 
-  // Undo functionality
+  // Undo/Redo/Clear
   const handleUndo = useCallback(() => {
     if (historyIndex > 0 && fabricCanvasRef.current) {
       const prevState = canvasHistory[historyIndex - 1];
@@ -443,7 +451,6 @@ const LiveAnnotationOverlay: React.FC<LiveAnnotationOverlayProps> = ({
     }
   }, [canvasHistory, historyIndex]);
 
-  // Redo functionality
   const handleRedo = useCallback(() => {
     if (historyIndex < canvasHistory.length - 1 && fabricCanvasRef.current) {
       const nextState = canvasHistory[historyIndex + 1];
@@ -454,7 +461,6 @@ const LiveAnnotationOverlay: React.FC<LiveAnnotationOverlayProps> = ({
     }
   }, [canvasHistory, historyIndex]);
 
-  // Clear canvas
   const handleClearCanvas = useCallback(() => {
     if (fabricCanvasRef.current) {
       fabricCanvasRef.current.clear();
@@ -465,7 +471,7 @@ const LiveAnnotationOverlay: React.FC<LiveAnnotationOverlayProps> = ({
     }
   }, [saveCanvasState, onAnnotationChange]);
 
-  // Handle keyboard shortcuts
+  // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey) {
@@ -486,7 +492,6 @@ const LiveAnnotationOverlay: React.FC<LiveAnnotationOverlayProps> = ({
         }
       }
 
-      // Delete key to remove selected objects
       if (e.key === "Delete" || e.key === "Backspace") {
         if (fabricCanvasRef.current) {
           const activeObjects = fabricCanvasRef.current.getActiveObjects();
@@ -513,11 +518,21 @@ const LiveAnnotationOverlay: React.FC<LiveAnnotationOverlayProps> = ({
     return null;
   }
 
-  // Wheel handler on the WRAPPER to allow seamless pass-through
+  // Wheel handler on the WRAPPER
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
-    if (activeTool === "select") return; // already passthrough
-    // Temporarily disable pointer-events on the wrapper so subsequent wheel
-    // events go straight into the iframe/content for smooth scrolling
+    if (activeTool === "select") return;
+
+    if (useVirtualScroll) {
+      // Cross-origin fallback: prevent page scroll and emit deltas scaled to page coords
+      e.preventDefault();
+      e.stopPropagation();
+      const dx = e.deltaX / (zoomLevel || 1);
+      const dy = e.deltaY / (zoomLevel || 1);
+      if (onScrollDelta) onScrollDelta(dx, dy);
+      return;
+    }
+
+    // Default behavior: allow temporary passthrough to let iframe handle scroll
     if (wheelTimeoutRef.current) window.clearTimeout(wheelTimeoutRef.current);
     setWheelPassthrough(true);
     wheelTimeoutRef.current = window.setTimeout(() => {
@@ -525,11 +540,10 @@ const LiveAnnotationOverlay: React.FC<LiveAnnotationOverlayProps> = ({
     }, 1200);
   };
 
-  // The wrapper controls event capture. We disable it when:
-  // - Select tool is active (full passthrough)
-  // - Wheel passthrough window is active (allow scrolling)
   const wrapperPointerEvents =
-    activeTool === "select" || wheelPassthrough ? "none" : "auto";
+    activeTool === "select" || (!useVirtualScroll && wheelPassthrough)
+      ? "none"
+      : "auto";
 
   return (
     <div
@@ -551,7 +565,6 @@ const LiveAnnotationOverlay: React.FC<LiveAnnotationOverlayProps> = ({
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={() => {
-          // Reset drawing state if mouse leaves canvas
           if (isDrawing) {
             setIsDrawing(false);
             setCurrentPath(null);

@@ -23,20 +23,17 @@ import {
   Clock,
 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
+import {
+  useSettings,
+  type Question as SettingsQuestion,
+  type MagnetCategory,
+} from "@/contexts/SettingsContext";
 
-interface Question {
-  id: string;
-  text: string;
-  type: "multiple_choice" | "text" | "rating";
-}
+// Use the Question type from SettingsContext for consistency
+type Question = SettingsQuestion;
 
-interface TabData {
-  id: string;
-  name: string;
-  description: string;
-  color: string;
-  questions: Question[];
-}
+// TabData is compatible with MagnetCategory from SettingsContext
+type TabData = MagnetCategory;
 
 interface MagnetReviewPanelProps {
   activeTab?: string;
@@ -62,10 +59,19 @@ const MagnetReviewPanel: React.FC<MagnetReviewPanelProps> = ({
   onResponseSave = () => {},
   onSubmit = () => {},
 }) => {
+  // Get dynamic settings from context first
+  const { magnetCategories } = useSettings();
+
+  // Use dynamic MAGNET Framework data from context
+  const magnetTabs: TabData[] = magnetCategories;
+
   const [responses, setResponses] = useState<
     Record<string, { answer: string; notes: string }>
   >({});
-  const [currentVisibleTab, setCurrentVisibleTab] = useState<string>(activeTab);
+  // Set initial tab to first available tab or fallback to activeTab prop
+  const initialTab = magnetTabs.length > 0 ? magnetTabs[0].id : activeTab;
+  const [currentVisibleTab, setCurrentVisibleTab] =
+    useState<string>(initialTab);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [autoSaveStatus, setAutoSaveStatus] = useState<
     "idle" | "saving" | "saved"
@@ -76,274 +82,6 @@ const MagnetReviewPanel: React.FC<MagnetReviewPanelProps> = ({
 
   // Generate storage key for persistence
   const storageKey = `magnet-review-${projectId}-${reviewId}`;
-
-  // MAGNET Framework data based on the official framework
-  const magnetTabs: TabData[] = [
-    {
-      id: "M",
-      name: "Magnetic Captivation",
-      description:
-        "Pass the 1-second Attention & Instant Clarity check. Clear, bold messaging that earns attention fast and makes them curious to stay beyond the 1-second skim.",
-      color: "bg-red-500",
-      questions: [
-        {
-          id: "m1",
-          text: "Does the website pass the 1-second attention test?",
-          type: "multiple_choice",
-        },
-        {
-          id: "m2",
-          text: "Is there clear, bold messaging that earns attention fast?",
-          type: "multiple_choice",
-        },
-        {
-          id: "m3",
-          text: "Does it make visitors curious to stay beyond the 1-second skim?",
-          type: "multiple_choice",
-        },
-        {
-          id: "m4",
-          text: "Is bounce-worthy confusion eliminated at the top?",
-          type: "multiple_choice",
-        },
-        {
-          id: "m5",
-          text: "Does the website stop the scroll and speak directly to the dream client?",
-          type: "multiple_choice",
-        },
-        {
-          id: "m6",
-          text: "Additional notes on magnetic captivation:",
-          type: "text",
-        },
-      ],
-    },
-    {
-      id: "A",
-      name: "Authentic Connection",
-      description:
-        "Trigger the 'they get me' response that keeps visitors engaged. Position yourself as the trusted guide and build emotional, logical, and philosophical connection in seconds.",
-      color: "bg-blue-500",
-      questions: [
-        {
-          id: "a1",
-          text: "Does the website trigger the 'they get me' response?",
-          type: "multiple_choice",
-        },
-        {
-          id: "a2",
-          text: "Is the brand positioned as a trusted guide, not just another expert?",
-          type: "multiple_choice",
-        },
-        {
-          id: "a3",
-          text: "Does it build emotional connection in seconds?",
-          type: "multiple_choice",
-        },
-        {
-          id: "a4",
-          text: "Does it build logical connection that makes sense?",
-          type: "multiple_choice",
-        },
-        {
-          id: "a5",
-          text: "Does it make strangers feel credible and trustworthy in seconds?",
-          type: "multiple_choice",
-        },
-        {
-          id: "a6",
-          text: "Does the website avoid feeling cold, robotic, or disconnected?",
-          type: "multiple_choice",
-        },
-        {
-          id: "a7",
-          text: "Additional notes on authentic connection:",
-          type: "text",
-        },
-      ],
-    },
-    {
-      id: "G",
-      name: "GOLDEN Persuasion",
-      description:
-        "Ethically boost conversions with persuasive storytelling. Make them sense your authority, trust your credibility, and build confidence to say YES fast.",
-      color: "bg-yellow-500",
-      questions: [
-        {
-          id: "g1",
-          text: "Does the website ethically boost conversions with persuasive storytelling?",
-          type: "multiple_choice",
-        },
-        {
-          id: "g2",
-          text: "Do visitors sense authority and trust credibility?",
-          type: "multiple_choice",
-        },
-        {
-          id: "g3",
-          text: "Does the strategic content answer silent objections?",
-          type: "multiple_choice",
-        },
-        {
-          id: "g4",
-          text: "Does it address risks and frictions effectively?",
-          type: "multiple_choice",
-        },
-        {
-          id: "g5",
-          text: "Does it build credibility, authority, and confidence to say YES fast?",
-          type: "multiple_choice",
-        },
-        {
-          id: "g6",
-          text: "Does it guide people toward action without pressure, manipulation, confusion, or doubt?",
-          type: "multiple_choice",
-        },
-        {
-          id: "g7",
-          text: "Additional notes on GOLDEN persuasion:",
-          type: "text",
-        },
-      ],
-    },
-    {
-      id: "N",
-      name: "Niche-Precision Design",
-      description:
-        "Design is your number 1 message! Visually match your niche without blending in, with clean layout and smart visual hierarchy that builds instant confidence.",
-      color: "bg-green-500",
-      questions: [
-        {
-          id: "n1",
-          text: "Does the design visually match the niche without blending in?",
-          type: "multiple_choice",
-        },
-        {
-          id: "n2",
-          text: "Is there a clean layout with smart visual hierarchy?",
-          type: "multiple_choice",
-        },
-        {
-          id: "n3",
-          text: "Is the design coherent and conversion-friendly?",
-          type: "multiple_choice",
-        },
-        {
-          id: "n4",
-          text: "Does it build instant confidence?",
-          type: "multiple_choice",
-        },
-        {
-          id: "n5",
-          text: "Does it look and feel like the expert the audience has been searching for?",
-          type: "multiple_choice",
-        },
-        {
-          id: "n6",
-          text: "Does the site's vibe match the niche and positioning while feeling uniquely yours?",
-          type: "multiple_choice",
-        },
-        {
-          id: "n7",
-          text: "Additional notes on niche-precision design:",
-          type: "text",
-        },
-      ],
-    },
-    {
-      id: "E",
-      name: "Elegant Experience",
-      description:
-        "Ensure your site loads fast, works everywhere, and feels like a smooth ride not a frustrating maze. Fast, responsive mobile-optimized experience that builds trust.",
-      color: "bg-purple-500",
-      questions: [
-        {
-          id: "e1",
-          text: "Does the site load fast and work everywhere?",
-          type: "multiple_choice",
-        },
-        {
-          id: "e2",
-          text: "Does it feel like a smooth ride, not a frustrating maze?",
-          type: "multiple_choice",
-        },
-        {
-          id: "e3",
-          text: "Is it fast and responsive with mobile optimization?",
-          type: "multiple_choice",
-        },
-        {
-          id: "e4",
-          text: "Does it build trust through a clean, premium feel?",
-          type: "multiple_choice",
-        },
-        {
-          id: "e5",
-          text: "Do visitors stay longer and explore more?",
-          type: "multiple_choice",
-        },
-        {
-          id: "e6",
-          text: "Can visitors take seamless action without friction?",
-          type: "multiple_choice",
-        },
-        {
-          id: "e7",
-          text: "Is staying and buying effortless, not frustrating?",
-          type: "multiple_choice",
-        },
-        {
-          id: "e8",
-          text: "Additional notes on elegant experience:",
-          type: "text",
-        },
-      ],
-    },
-    {
-      id: "T",
-      name: "Targeted Dominance",
-      description:
-        "No more winking in the dark! Improve visibility in search, socials, and beyond. Build long-term discoverability and position yourself as the go-to, not just another option.",
-      color: "bg-orange-500",
-      questions: [
-        {
-          id: "t1",
-          text: "Does the website improve visibility in search and socials?",
-          type: "multiple_choice",
-        },
-        {
-          id: "t2",
-          text: "Does it build long-term discoverability?",
-          type: "multiple_choice",
-        },
-        {
-          id: "t3",
-          text: "Is the brand positioned as the go-to, not just another option?",
-          type: "multiple_choice",
-        },
-        {
-          id: "t4",
-          text: "Do dream clients actually find the website?",
-          type: "multiple_choice",
-        },
-        {
-          id: "t5",
-          text: "Is the site SEO-optimized and social-ready?",
-          type: "multiple_choice",
-        },
-        {
-          id: "t6",
-          text: "Is it built to show up where the audience hangs out?",
-          type: "multiple_choice",
-        },
-        {
-          id: "t7",
-          text: "Additional notes on targeted dominance:",
-          type: "text",
-        },
-      ],
-    },
-  ];
 
   // Auto-save functionality with debouncing
   const triggerAutoSave = useCallback(
@@ -495,10 +233,39 @@ const MagnetReviewPanel: React.FC<MagnetReviewPanelProps> = ({
     };
   }, []);
 
-  // Update current visible tab when activeTab prop changes
+  // Update current visible tab when activeTab prop changes or magnetTabs change
   useEffect(() => {
-    setCurrentVisibleTab(activeTab);
-  }, [activeTab]);
+    if (magnetTabs.length > 0) {
+      // If activeTab exists in magnetTabs, use it; otherwise use first tab
+      const tabExists = magnetTabs.some((tab) => tab.id === activeTab);
+      setCurrentVisibleTab(tabExists ? activeTab : magnetTabs[0].id);
+    }
+  }, [activeTab, magnetTabs]);
+
+  // Re-render when magnetCategories change to ensure dynamic updates
+  useEffect(() => {
+    console.log(
+      "MagnetReviewPanel: magnetCategories updated",
+      magnetCategories.length,
+      "categories",
+    );
+    // Force re-initialization of intersection observers when categories change
+    const timeoutId = setTimeout(() => {
+      // Re-observe sections after categories update
+      Object.values(sectionRefs.current).forEach((ref) => {
+        if (ref) {
+          const observer = new IntersectionObserver(handleIntersection, {
+            root: scrollAreaRef.current,
+            rootMargin: "-10% 0px -70% 0px",
+            threshold: [0, 0.1, 0.25, 0.5, 0.75, 1],
+          });
+          observer.observe(ref);
+        }
+      });
+    }, 100);
+
+    return () => clearTimeout(timeoutId);
+  }, [magnetCategories, handleIntersection]);
 
   // Scroll to section when tab is clicked
   const scrollToSection = (tabId: string) => {
@@ -593,13 +360,22 @@ const MagnetReviewPanel: React.FC<MagnetReviewPanelProps> = ({
       <div className="p-4 border-b">
         <p className="text-sm text-muted-foreground">
           Evaluate the website using the MAGNET framework
+          <span className="ml-2 text-xs text-green-600">
+            • Using dynamic settings ({magnetTabs.length} categories)
+          </span>
         </p>
       </div>
 
       {/* Tab Navigation */}
       <div className="border-b">
         <Tabs value={currentVisibleTab} onValueChange={handleTabClick}>
-          <TabsList className="w-full grid grid-cols-6 h-12">
+          <TabsList
+            className={`w-full h-12`}
+            style={{
+              display: "grid",
+              gridTemplateColumns: `repeat(${magnetTabs.length}, 1fr)`,
+            }}
+          >
             {magnetTabs.map((tab) => (
               <TabsTrigger
                 key={tab.id}
@@ -667,45 +443,89 @@ const MagnetReviewPanel: React.FC<MagnetReviewPanelProps> = ({
                             }
                             className="flex flex-col space-y-1"
                           >
-                            <div className="flex items-center space-x-2">
-                              <RadioGroupItem
-                                value="yes"
-                                id={`${question.id}-yes`}
-                              />
-                              <Label
-                                htmlFor={`${question.id}-yes`}
-                                className="flex items-center"
-                              >
-                                <CheckCircle className="w-4 h-4 mr-1 text-green-500" />
-                                Yes
-                              </Label>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <RadioGroupItem
-                                value="no"
-                                id={`${question.id}-no`}
-                              />
-                              <Label
-                                htmlFor={`${question.id}-no`}
-                                className="flex items-center"
-                              >
-                                <AlertCircle className="w-4 h-4 mr-1 text-red-500" />
-                                No
-                              </Label>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <RadioGroupItem
-                                value="needs_work"
-                                id={`${question.id}-needs-work`}
-                              />
-                              <Label
-                                htmlFor={`${question.id}-needs-work`}
-                                className="flex items-center"
-                              >
-                                <HelpCircle className="w-4 h-4 mr-1 text-amber-500" />
-                                Needs Work
-                              </Label>
-                            </div>
+                            {question.config?.options?.map((option) => {
+                              const getIconForOption = (
+                                value: string,
+                                points: number,
+                              ) => {
+                                if (points >= 0.8)
+                                  return (
+                                    <CheckCircle className="w-4 h-4 mr-1 text-green-500" />
+                                  );
+                                if (points >= 0.3)
+                                  return (
+                                    <HelpCircle className="w-4 h-4 mr-1 text-amber-500" />
+                                  );
+                                return (
+                                  <AlertCircle className="w-4 h-4 mr-1 text-red-500" />
+                                );
+                              };
+
+                              return (
+                                <div
+                                  key={option.value}
+                                  className="flex items-center space-x-2"
+                                >
+                                  <RadioGroupItem
+                                    value={option.value}
+                                    id={`${question.id}-${option.value}`}
+                                  />
+                                  <Label
+                                    htmlFor={`${question.id}-${option.value}`}
+                                    className="flex items-center"
+                                  >
+                                    {getIconForOption(
+                                      option.value,
+                                      option.points || 0,
+                                    )}
+                                    {option.label}
+                                  </Label>
+                                </div>
+                              );
+                            }) || (
+                              // Fallback to default options if no custom options
+                              <>
+                                <div className="flex items-center space-x-2">
+                                  <RadioGroupItem
+                                    value="yes"
+                                    id={`${question.id}-yes`}
+                                  />
+                                  <Label
+                                    htmlFor={`${question.id}-yes`}
+                                    className="flex items-center"
+                                  >
+                                    <CheckCircle className="w-4 h-4 mr-1 text-green-500" />
+                                    Yes
+                                  </Label>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  <RadioGroupItem
+                                    value="no"
+                                    id={`${question.id}-no`}
+                                  />
+                                  <Label
+                                    htmlFor={`${question.id}-no`}
+                                    className="flex items-center"
+                                  >
+                                    <AlertCircle className="w-4 h-4 mr-1 text-red-500" />
+                                    No
+                                  </Label>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  <RadioGroupItem
+                                    value="needs_work"
+                                    id={`${question.id}-needs-work`}
+                                  />
+                                  <Label
+                                    htmlFor={`${question.id}-needs-work`}
+                                    className="flex items-center"
+                                  >
+                                    <HelpCircle className="w-4 h-4 mr-1 text-amber-500" />
+                                    Needs Work
+                                  </Label>
+                                </div>
+                              </>
+                            )}
                             <Separator className="my-2" />
                             <Textarea
                               placeholder="Add notes (optional)"
@@ -716,10 +536,74 @@ const MagnetReviewPanel: React.FC<MagnetReviewPanelProps> = ({
                               }
                             />
                           </RadioGroup>
+                        ) : question.type === "rating" ? (
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between text-sm text-muted-foreground">
+                              <span>
+                                {question.config?.rating?.minLabel || "Min"}
+                              </span>
+                              <span>
+                                {question.config?.rating?.maxLabel || "Max"}
+                              </span>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              {Array.from(
+                                {
+                                  length:
+                                    (question.config?.rating?.max || 5) -
+                                    (question.config?.rating?.min || 1) +
+                                    1,
+                                },
+                                (_, i) => {
+                                  const value =
+                                    (question.config?.rating?.min || 1) + i;
+                                  return (
+                                    <Button
+                                      key={value}
+                                      type="button"
+                                      variant={
+                                        responses[question.id]?.answer ===
+                                        value.toString()
+                                          ? "default"
+                                          : "outline"
+                                      }
+                                      size="sm"
+                                      onClick={() =>
+                                        handleResponseChange(
+                                          question.id,
+                                          value.toString(),
+                                        )
+                                      }
+                                      className="w-10 h-10"
+                                    >
+                                      {value}
+                                    </Button>
+                                  );
+                                },
+                              )}
+                            </div>
+                            <Separator className="my-2" />
+                            <Textarea
+                              placeholder="Add notes (optional)"
+                              className="min-h-[60px] text-sm"
+                              value={responses[question.id]?.notes || ""}
+                              onChange={(e) =>
+                                handleNotesChange(question.id, e.target.value)
+                              }
+                            />
+                          </div>
                         ) : (
                           <Textarea
-                            placeholder="Enter your response"
-                            className="min-h-[100px]"
+                            placeholder={
+                              question.config?.text?.placeholder ||
+                              "Enter your response"
+                            }
+                            className={
+                              question.config?.text?.multiline
+                                ? "min-h-[100px]"
+                                : "min-h-[60px]"
+                            }
+                            maxLength={question.config?.text?.maxLength}
                             value={responses[question.id]?.notes || ""}
                             onChange={(e) =>
                               handleNotesChange(question.id, e.target.value)

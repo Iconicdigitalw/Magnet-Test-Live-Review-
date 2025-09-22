@@ -3,7 +3,14 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Search, Plus, Settings } from "lucide-react";
+import { Search, Plus, Settings, ChevronDown } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import AnnotationWorkspace from "./AnnotationWorkspace";
 import MagnetReviewPanel from "./MagnetReviewPanel";
 import DashboardStats from "./dashboard/DashboardStats";
@@ -87,6 +94,11 @@ const Home = () => {
     }
   };
 
+  // Function to navigate to admin settings
+  const handleNavigateToSettings = () => {
+    window.location.href = "/admin/settings";
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Top Navigation - Hidden in workspace mode */}
@@ -120,9 +132,27 @@ const Home = () => {
               </nav>
             </div>
             <div className="flex items-center space-x-4">
-              <Button variant="ghost" size="icon">
-                <Settings className="h-5 w-5" />
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" className="flex items-center gap-1">
+                    <Settings className="h-4 w-4" />
+                    <span className="hidden sm:inline">Settings</span>
+                    <ChevronDown className="h-3 w-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={handleNavigateToSettings}>
+                    <Settings className="mr-2 h-4 w-4" />
+                    Edit MAGNET Questionnaire
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem disabled>
+                    <span className="text-muted-foreground">
+                      More settings coming soon...
+                    </span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
               <Avatar>
                 <AvatarImage
                   src="https://api.dicebear.com/7.x/avataaars/svg?seed=user123"

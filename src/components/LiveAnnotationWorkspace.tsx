@@ -1,10 +1,11 @@
-const handleMouseUp = (e?: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDrawing || !currentPath || !fabricCanvasRef.current) return;
-    
-    // Prevent default only when we were actually drawing
-    if (e && isDrawing) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
+import React from "react";
+import AnnotationWorkspace from "./AnnotationWorkspace";
 
-    const canvas = fabricCanvasRef.current;
+// Placeholder wrapper to avoid build issues. Can be expanded later if needed.
+export default function LiveAnnotationWorkspace() {
+  return (
+    <div className="w-full h-full bg-white">
+      <AnnotationWorkspace />
+    </div>
+  );
+}

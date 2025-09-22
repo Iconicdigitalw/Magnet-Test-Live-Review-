@@ -1,19 +1,24 @@
 import { Suspense, useState, useEffect } from "react";
 import { useRoutes, Routes, Route } from "react-router-dom";
+import { SettingsProvider } from "./contexts/SettingsContext";
+import { Toaster } from "./components/ui/toaster";
 import Home from "./components/home";
+import AdminSettings from "./components/admin/AdminSettings";
 
 function App() {
   const isTempoMode = import.meta.env.VITE_TEMPO === "true";
 
   return (
-    <Suspense fallback={<p>Loading...</p>}>
-      <>
+    <SettingsProvider>
+      <Suspense fallback={<p>Loading...</p>}>
         <Routes>
           <Route path="/" element={<Home />} />
+          <Route path="/admin/settings" element={<AdminSettings />} />
         </Routes>
         {isTempoMode && <TempoRoutes />}
-      </>
-    </Suspense>
+      </Suspense>
+      <Toaster />
+    </SettingsProvider>
   );
 }
 
