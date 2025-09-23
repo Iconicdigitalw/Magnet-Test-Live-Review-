@@ -25,13 +25,28 @@ export default function Login() {
     e.preventDefault();
     setError(null);
     setLoading(true);
+
+    // Basic validation
+    if (!email.trim() || !password) {
+      setError("Please enter both email and password");
+      setLoading(false);
+      return;
+    }
+
     try {
-      await login(email, password);
-      const redirectTo =
-        (location.state?.from as any)?.pathname || "/admin/settings";
+      await login(email.trim(), password);
+
+      // Determine redirect path
+      const redirectTo = (location.state?.from as any)?.pathname || "/";
+
+      // Navigate with replace to prevent back button issues
       navigate(redirectTo, { replace: true });
     } catch (err: any) {
-      setError(err?.message || "Login failed");
+      console.error("Login error:", err);
+      setError(
+        err?.message ||
+          "Login failed. Please check your credentials and try again.",
+      );
     } finally {
       setLoading(false);
     }
