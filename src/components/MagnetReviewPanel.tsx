@@ -677,11 +677,11 @@ const MagnetReviewPanelInner: React.FC<MagnetReviewPanelProps> = ({
                                       !responses[question.id]?.answer?.includes(
                                         ":",
                                       ) && (
-                                        <div className="ml-6 mt-2 p-3 bg-muted/30 rounded-lg border-l-2 border-amber-300">
-                                          <div className="text-xs text-muted-foreground mb-2">
+                                        <div className="ml-6 mt-2 p-3 bg-muted/30 rounded-lg border-l-2 border-amber-300 flex flex-col items-start py-0 justify-start w-[169.76484421071655px]">
+                                          <div className="text-xs text-muted-foreground mb-2 w-[152.35384843985912px]">
                                             How much work is needed?
                                           </div>
-                                          <div className="flex items-center space-x-2">
+                                          <div className="flex space-x-2 items-start content-start my-0 w-[120px] justify-start">
                                             <TooltipProvider>
                                               {option.subOptions.map(
                                                 (subOption) => {
@@ -693,7 +693,10 @@ const MagnetReviewPanelInner: React.FC<MagnetReviewPanelProps> = ({
                                                     <Tooltip
                                                       key={subOption.value}
                                                     >
-                                                      <TooltipTrigger asChild>
+                                                      <TooltipTrigger
+                                                        asChild
+                                                        className=" w-[18px] h-[18px]"
+                                                      >
                                                         <button
                                                           type="button"
                                                           onClick={() =>
@@ -703,9 +706,9 @@ const MagnetReviewPanelInner: React.FC<MagnetReviewPanelProps> = ({
                                                               subOption.value,
                                                             )
                                                           }
-                                                          className={`text-2xl transition-all duration-200 hover:scale-110 ${
+                                                          className={`text-lg transition-all duration-200 hover:scale-110 ${
                                                             isSelected
-                                                              ? "ring-2 ring-primary ring-offset-2 rounded-full"
+                                                              ? "ring-1 ring-gray-400 ring-offset-[2px] rounded-full"
                                                               : "hover:opacity-80"
                                                           }`}
                                                         >
@@ -736,7 +739,7 @@ const MagnetReviewPanelInner: React.FC<MagnetReviewPanelProps> = ({
                                           <div className="text-xs text-muted-foreground mb-2">
                                             How much work is needed?
                                           </div>
-                                          <div className="flex items-center space-x-2">
+                                          <div className="flex items-center space-x-2 w-[148.22594387949573px]">
                                             <TooltipProvider>
                                               {option.subOptions.map(
                                                 (subOption) => {
@@ -748,7 +751,10 @@ const MagnetReviewPanelInner: React.FC<MagnetReviewPanelProps> = ({
                                                     <Tooltip
                                                       key={subOption.value}
                                                     >
-                                                      <TooltipTrigger asChild>
+                                                      <TooltipTrigger
+                                                        asChild
+                                                        className="flex"
+                                                      >
                                                         <button
                                                           type="button"
                                                           onClick={() =>
@@ -758,9 +764,9 @@ const MagnetReviewPanelInner: React.FC<MagnetReviewPanelProps> = ({
                                                               subOption.value,
                                                             )
                                                           }
-                                                          className={`text-2xl transition-all duration-200 hover:scale-110 ${
+                                                          className={`text-lg transition-all duration-200 hover:scale-110 ${
                                                             isSelected
-                                                              ? "ring-2 ring-primary ring-offset-2 rounded-full"
+                                                              ? "ring-1 ring-gray-400 ring-offset-[2px] rounded-full"
                                                               : "hover:opacity-80"
                                                           }`}
                                                         >
