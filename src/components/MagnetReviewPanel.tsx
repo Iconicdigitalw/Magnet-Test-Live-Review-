@@ -234,10 +234,21 @@ const MagnetReviewPanelInner: React.FC<MagnetReviewPanelProps> = ({
 
   // Set up intersection observer
   useEffect(() => {
+    if (!scrollAreaRef.current) return;
+
+    // Find the actual scrollable viewport
+    let scrollRoot = scrollAreaRef.current.querySelector(
+      "[data-radix-scroll-area-viewport]",
+    ) as HTMLElement;
+
+    if (!scrollRoot) {
+      scrollRoot = scrollAreaRef.current;
+    }
+
     const observer = new IntersectionObserver(handleIntersection, {
-      root: scrollAreaRef.current,
-      rootMargin: "-10% 0px -70% 0px", // Trigger when section header is near the top
-      threshold: [0, 0.1, 0.25, 0.5, 0.75, 1], // Multiple thresholds for better detection
+      root: scrollRoot,
+      rootMargin: "-20% 0px -60% 0px", // Adjusted margins for better detection
+      threshold: [0, 0.1, 0.3, 0.5, 0.7, 1], // Multiple thresholds for better detection
     });
 
     // Re-observe all sections when the observer is set up
@@ -249,14 +260,14 @@ const MagnetReviewPanelInner: React.FC<MagnetReviewPanelProps> = ({
       });
     };
 
-    // Small delay to ensure refs are set
-    const timeoutId = setTimeout(observeSections, 100);
+    // Longer delay to ensure refs are properly set
+    const timeoutId = setTimeout(observeSections, 200);
 
     return () => {
       clearTimeout(timeoutId);
       observer.disconnect();
     };
-  }, [handleIntersection]);
+  }, [handleIntersection, magnetTabs.length]);
 
   // Load saved responses from localStorage on component mount
   useEffect(() => {
@@ -288,45 +299,71 @@ const MagnetReviewPanelInner: React.FC<MagnetReviewPanelProps> = ({
       // If activeTab exists in magnetTabs, use it; otherwise use first tab
       const tabExists = magnetTabs.some((tab) => tab.id === activeTab);
       const targetTab = tabExists ? activeTab : magnetTabs[0].id;
-      setCurrentVisibleTab(targetTab);
 
-      // If panel is not minimized, ensure we scroll the content to the selected section
-      if (!isMinimized) {
-        // Delay to ensure sections are mounted and refs are set
-        const t = setTimeout(() => {
-          scrollToSection(targetTab);
-        }, 50);
-        return () => clearTimeout(t);
+      // Always update the current visible tab when activeTab changes
+      if (targetTab !== currentVisibleTab) {
+        setCurrentVisibleTab(targetTab);
+
+        // If panel is not minimized, ensure we scroll the content to the selected section
+        if (!isMinimized) {
+          // Longer delay to ensure sections are mounted and refs are set
+          setTimeout(() => {
+            scrollToSection(targetTab);
+          }, 150);
+        }
       }
     }
-  }, [activeTab, magnetTabs, isMinimized]);
+  }, [activeTab, magnetTabs, isMinimized, currentVisibleTab]);
 
   // Scroll to section when tab is clicked
   const scrollToSection = (tabId: string) => {
     const sectionRef = sectionRefs.current[tabId];
-    if (sectionRef) {
-      // Get the scroll area viewport
-      const scrollArea = scrollAreaRef.current?.querySelector(
+    if (sectionRef && scrollAreaRef.current) {
+      // Get the scroll area viewport - try multiple selectors
+      let scrollViewport = scrollAreaRef.current.querySelector(
         "[data-radix-scroll-area-viewport]",
-      );
-      if (scrollArea) {
+      ) as HTMLElement;
+
+      if (!scrollViewport) {
+        // Fallback selectors
+        scrollViewport = scrollAreaRef.current.querySelector(
+          ".scroll-area-viewport",
+        ) as HTMLElement;
+      }
+
+      if (!scrollViewport) {
+        // Last fallback - look for scrollable element
+        scrollViewport = scrollAreaRef.current.querySelector(
+          "[style*='overflow']",
+        ) as HTMLElement;
+      }
+
+      if (scrollViewport) {
         const sectionTop = sectionRef.offsetTop;
-        (scrollArea as HTMLElement).scrollTo({
-          top: sectionTop,
+        scrollViewport.scrollTo({
+          top: sectionTop - 10, // Small offset for better visibility
           behavior: "smooth",
         });
       } else {
-        // Fallback to scrollIntoView
-        sectionRef.scrollIntoView({ behavior: "smooth", block: "start" });
+        // Direct fallback to scrollIntoView
+        sectionRef.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+          inline: "nearest",
+        });
       }
     }
   };
 
   // Handle tab click
   const handleTabClick = (tabId: string) => {
+    console.log("Tab clicked:", tabId, "Current:", currentVisibleTab);
     setCurrentVisibleTab(tabId);
     onTabChange(tabId);
-    scrollToSection(tabId);
+    // Use setTimeout to ensure DOM is updated before scrolling
+    setTimeout(() => {
+      scrollToSection(tabId);
+    }, 50);
   };
 
   // Check if a question has been answered
@@ -405,9 +442,21 @@ const MagnetReviewPanelInner: React.FC<MagnetReviewPanelProps> = ({
               <button
                 key={tab.id}
                 onClick={() => {
+                  console.log(
+                    "Minimized tab clicked:",
+                    tab.id,
+                    "Current:",
+                    currentVisibleTab,
+                  );
+                  // First update the tab, then expand
                   setCurrentVisibleTab(tab.id);
                   onTabChange(tab.id);
-                  onMinimizeToggle(); // Expand when tab is clicked
+                  // Expand the panel first
+                  onMinimizeToggle();
+                  // Then scroll to the section after expansion
+                  setTimeout(() => {
+                    scrollToSection(tab.id);
+                  }, 100);
                 }}
                 className={`h-8 w-8 text-sm font-medium transition-colors flex items-center justify-center rounded ${
                   isActive

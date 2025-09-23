@@ -199,6 +199,12 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
     setIsMagnetPanelMinimized(!isMagnetPanelMinimized);
 
   const handleMagnetTabChange = (tabId: string) => {
+    console.log(
+      "AnnotationWorkspace: Tab change requested:",
+      tabId,
+      "Current:",
+      magnetActiveTab,
+    );
     setMagnetActiveTab(tabId);
     onTabChange(tabId);
   };
@@ -1399,7 +1405,9 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
                       reviewId={reviewId}
                       onTabChange={handleMagnetTabChange}
                       isMinimized={false}
-                      onMinimizeToggle={toggleMagnetPanelMinimize}
+                      onMinimizeToggle={() => {
+                        setIsMagnetPanelMinimized(false);
+                      }}
                       onResponseSave={(tabId, questionId, answer, notes) => {
                         console.log("Response saved:", {
                           tabId,
@@ -1428,7 +1436,6 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
                     reviewId={reviewId}
                     onTabChange={(tabId) => {
                       handleMagnetTabChange(tabId);
-                      setIsMagnetPanelMinimized(false); // Expand when tab is clicked
                     }}
                     isMinimized={true}
                     onMinimizeToggle={toggleMagnetPanelMinimize}
