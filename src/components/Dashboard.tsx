@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
@@ -7,7 +7,6 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Search, Plus, Settings, Users, BarChart3 } from "lucide-react";
 
 import AnnotationWorkspace from "./AnnotationWorkspace";
-import MagnetReviewPanel from "./MagnetReviewPanel";
 import DashboardStats from "./dashboard/DashboardStats";
 import RecentProjects from "./dashboard/RecentProjects";
 import RecentActivity from "./dashboard/RecentActivity";
@@ -22,9 +21,7 @@ import {
 } from "@/data/mockData";
 import { useSettings } from "@/contexts/SettingsContext";
 
-import { useNavigate } from "react-router-dom";
-
-const Home = () => {
+const Dashboard = () => {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [showNewProjectDialog, setShowNewProjectDialog] = useState(false);
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
@@ -188,7 +185,6 @@ const Home = () => {
           </div>
         </header>
       )}
-
       {/* Main Content */}
       {activeTab !== "workspace" ? (
         <main className="container px-4 py-6">
@@ -196,115 +192,9 @@ const Home = () => {
           {activeTab === "dashboard" && (
             <div className="space-y-8">
               {/* Hero Section */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
-                <div className="space-y-6">
-                  <div className="space-y-4">
-                    <h1 className="text-4xl lg:text-5xl font-bold tracking-tight">
-                      Professional Website Reviews with{" "}
-                      <span className="text-primary">
-                        MAGNET Test<sup className="text-sm">TM</sup>
-                      </span>
-                    </h1>
-                    <p className="text-xl text-muted-foreground">
-                      Comprehensive website analysis framework that evaluates
-                      user experience across six critical dimensions
-                    </p>
-                  </div>
-
-                  <div className="space-y-3">
-                    <h3 className="text-lg font-semibold">
-                      What you get from MAGNET reviews:
-                    </h3>
-                    <ul className="space-y-2 text-muted-foreground">
-                      <li className="flex items-start gap-2">
-                        <div className="w-2 h-2 bg-primary rounded-full mt-2 flex-shrink-0"></div>
-                        <span>
-                          <strong className="text-foreground">Message:</strong>{" "}
-                          Clear communication and value proposition assessment
-                        </span>
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <div className="w-2 h-2 bg-primary rounded-full mt-2 flex-shrink-0"></div>
-                        <span>
-                          <strong className="text-foreground">
-                            Attraction:
-                          </strong>{" "}
-                          Visual appeal and first impression analysis
-                        </span>
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <div className="w-2 h-2 bg-primary rounded-full mt-2 flex-shrink-0"></div>
-                        <span>
-                          <strong className="text-foreground">Goal:</strong>{" "}
-                          Conversion optimization and user journey evaluation
-                        </span>
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <div className="w-2 h-2 bg-primary rounded-full mt-2 flex-shrink-0"></div>
-                        <span>
-                          <strong className="text-foreground">
-                            Navigation:
-                          </strong>{" "}
-                          User experience and site structure review
-                        </span>
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <div className="w-2 h-2 bg-primary rounded-full mt-2 flex-shrink-0"></div>
-                        <span>
-                          <strong className="text-foreground">
-                            Experience:
-                          </strong>{" "}
-                          Overall usability and interaction quality
-                        </span>
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <div className="w-2 h-2 bg-primary rounded-full mt-2 flex-shrink-0"></div>
-                        <span>
-                          <strong className="text-foreground">Trust:</strong>{" "}
-                          Credibility and security perception analysis
-                        </span>
-                      </li>
-                    </ul>
-                  </div>
-
-                  <div className="flex gap-4">
-                    <Button
-                      size="lg"
-                      onClick={() => setShowNewProjectDialog(true)}
-                      className="text-lg px-8 py-3"
-                    >
-                      <Plus className="mr-2 h-5 w-5" /> Start New Review
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="lg"
-                      onClick={() => setActiveTab("projects")}
-                      className="text-lg px-8 py-3"
-                    >
-                      View Projects
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="relative">
-                  <div className="aspect-[4/3] rounded-lg overflow-hidden shadow-2xl">
-                    <img
-                      src="https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800&q=80"
-                      alt="Website analytics and review dashboard"
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                  <div className="absolute -bottom-4 -right-4 w-24 h-24 bg-primary/10 rounded-full flex items-center justify-center">
-                    <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center">
-                      <BarChart3 className="w-8 h-8 text-primary-foreground" />
-                    </div>
-                  </div>
-                </div>
-              </div>
 
               {/* Stats Cards */}
               <DashboardStats projects={projects} />
-
               {/* Recent Projects and Activity */}
               <div className="grid gap-4 md:grid-cols-2">
                 <RecentProjects
@@ -489,7 +379,6 @@ const Home = () => {
           />
         </div>
       )}
-
       {/* All Dialogs */}
       <ProjectDialogs
         showNewProjectDialog={showNewProjectDialog}
@@ -507,4 +396,4 @@ const Home = () => {
   );
 };
 
-export default Home;
+export default Dashboard;

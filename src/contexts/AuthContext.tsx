@@ -222,16 +222,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error("Email and password are required");
     }
 
+    // Wait for users to be initialized
+    if (userRecords.length === 0) {
+      throw new Error(
+        "Authentication system is still initializing. Please try again in a moment.",
+      );
+    }
+
     const record = userRecords.find(
       (u) => u.email.trim().toLowerCase() === email.trim().toLowerCase(),
     );
     if (!record) {
-      throw new Error("Invalid credentials");
+      throw new Error(
+        "Invalid email or password. Try demo@magnet.app with password demo123",
+      );
     }
 
     const passwordMatch = await bcrypt.compare(password, record.passwordHash);
     if (!passwordMatch) {
-      throw new Error("Invalid credentials");
+      throw new Error(
+        "Invalid email or password. Try demo@magnet.app with password demo123",
+      );
     }
 
     const publicUser = toPublicUser(record);

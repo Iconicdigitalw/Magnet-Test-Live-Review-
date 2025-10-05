@@ -9,8 +9,10 @@ import {
 } from "react-router-dom";
 import { SettingsProvider } from "./contexts/SettingsContext";
 import { Toaster } from "./components/ui/toaster";
-import Home from "./components/home";
+import HomePage from "./components/HomePage";
+import Dashboard from "./components/Dashboard";
 import AdminSettings from "./components/admin/AdminSettings";
+import UserManagement from "./components/admin/UserManagement";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import Login from "./components/auth/Login";
 
@@ -22,11 +24,12 @@ function App() {
       <SettingsProvider>
         <Suspense fallback={<p>Loading...</p>}>
           <Routes>
+            <Route path="/" element={<HomePage />} />
             <Route
-              path="/"
+              path="/dashboard"
               element={
                 <ProtectedRoute>
-                  <Home />
+                  <Dashboard />
                 </ProtectedRoute>
               }
             />
@@ -37,6 +40,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <AdminSettings />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/users"
+              element={
+                <ProtectedRoute>
+                  <UserManagement />
                 </ProtectedRoute>
               }
             />

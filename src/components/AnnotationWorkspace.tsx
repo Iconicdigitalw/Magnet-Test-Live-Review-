@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import { Link } from "react-router-dom";
 import {
   Laptop,
   Smartphone,
@@ -25,6 +26,19 @@ import {
   BarChart3,
   ChevronLeft,
   ChevronRight,
+  Pen,
+  Highlighter,
+  Type,
+  ArrowRight as ArrowTool,
+  MousePointer,
+  Eraser,
+  Trash2,
+  StickyNote,
+  Bold,
+  Italic,
+  List,
+  ListOrdered,
+  Save,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -135,9 +149,20 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
     total: number;
     status: string;
   }>({ current: 0, total: 0, status: "" });
+  const [annotationTool, setAnnotationTool] = useState<string>("none");
+  const [annotationColor, setAnnotationColor] = useState<string>("#ef4444");
+  const [showAnnotationTools, setShowAnnotationTools] =
+    useState<boolean>(false);
+  const [clearMode, setClearMode] = useState<
+    "none" | "all" | "erase" | "select"
+  >("none");
+  const [isNotesOpen, setIsNotesOpen] = useState<boolean>(false);
+  const [noteContent, setNoteContent] = useState<string>("");
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const notesRef = useRef<HTMLTextAreaElement>(null);
 
   const currentDevice =
     deviceSizes.find((device) => device.id === selectedDevice) ||
@@ -979,6 +1004,162 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
     return colors[tabId] || "#22c55e";
   };
 
+  const annotationColors = [
+    { name: "Red", value: "#ef4444" },
+    { name: "Blue", value: "#3b82f6" },
+    { name: "Yellow", value: "#eab308" },
+    { name: "Green", value: "#22c55e" },
+    { name: "Purple", value: "#a855f7" },
+    { name: "Orange", value: "#f97316" },
+    { name: "Black", value: "#000000" },
+    { name: "White", value: "#ffffff" },
+  ];
+
+  const handleClearModeChange = (mode: "none" | "all" | "erase" | "select") => {
+    setClearMode(mode);
+
+    if (mode === "all") {
+      toast({
+        title: "Annotations cleared",
+        description: "All annotations have been removed.",
+        duration: 2000,
+      });
+    } else if (mode === "erase") {
+      setAnnotationTool("none");
+      toast({
+        title: "Eraser mode activated",
+        description: "Click and drag to erase annotations.",
+        duration: 2000,
+      });
+    } else if (mode === "select") {
+      setAnnotationTool("none");
+      toast({
+        title: "Select mode activated",
+        description: "Click on annotations to delete them.",
+        duration: 2000,
+      });
+    }
+  };
+
+  const handleClearComplete = () => {
+    setClearMode("none");
+  };
+
+  // Notes functionality
+  const toggleNotes = () => {
+    setIsNotesOpen(!isNotesOpen);
+    if (!isNotesOpen) {
+      // Load existing notes for this review
+      loadNotes();
+    }
+  };
+
+  const loadNotes = () => {
+    try {
+      const savedNotes = localStorage.getItem(`magnet-notes-${reviewId}`);
+      if (savedNotes) {
+        const parsed = JSON.parse(savedNotes);
+        setNoteContent(parsed.content || "");
+        setLastSaved(parsed.lastSaved ? new Date(parsed.lastSaved) : null);
+      }
+    } catch (error) {
+      console.error("Error loading notes:", error);
+    }
+  };
+
+  const saveNotes = () => {
+    try {
+      const notesData = {
+        content: noteContent,
+        lastSaved: new Date().toISOString(),
+        reviewId,
+        projectId,
+      };
+      localStorage.setItem(
+        `magnet-notes-${reviewId}`,
+        JSON.stringify(notesData),
+      );
+      setLastSaved(new Date());
+      toast({
+        title: "Notes saved",
+        description: "Your notes have been saved successfully.",
+        duration: 2000,
+      });
+    } catch (error) {
+      console.error("Error saving notes:", error);
+      toast({
+        title: "Save failed",
+        description: "There was an error saving your notes.",
+        variant: "destructive",
+        duration: 3000,
+      });
+    }
+  };
+
+  // Auto-save notes after 2 seconds of inactivity
+  useEffect(() => {
+    if (!noteContent) return;
+
+    const timeoutId = setTimeout(() => {
+      saveNotes();
+    }, 2000);
+
+    return () => clearTimeout(timeoutId);
+  }, [noteContent]);
+
+  const insertFormatting = (format: string) => {
+    const textarea = notesRef.current;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = noteContent.substring(start, end);
+    let newText = "";
+    let newCursorPos = start;
+
+    switch (format) {
+      case "bold":
+        newText = `**${selectedText}**`;
+        newCursorPos = selectedText ? start + newText.length : start + 2;
+        break;
+      case "italic":
+        newText = `*${selectedText}*`;
+        newCursorPos = selectedText ? start + newText.length : start + 1;
+        break;
+      case "list":
+        const lines = selectedText.split("\n");
+        newText = lines
+          .map((line) => (line.trim() ? `• ${line.trim()}` : line))
+          .join("\n");
+        newCursorPos = start + newText.length;
+        break;
+      case "numbered":
+        const numberedLines = selectedText.split("\n");
+        newText = numberedLines
+          .map((line, index) =>
+            line.trim() ? `${index + 1}. ${line.trim()}` : line,
+          )
+          .join("\n");
+        newCursorPos = start + newText.length;
+        break;
+      default:
+        return;
+    }
+
+    const updatedContent =
+      noteContent.substring(0, start) + newText + noteContent.substring(end);
+
+    setNoteContent(updatedContent);
+
+    // Restore cursor position
+    setTimeout(() => {
+      if (textarea) {
+        textarea.focus();
+        textarea.setSelectionRange(newCursorPos, newCursorPos);
+      }
+    }, 0);
+  };
+
   return (
     <div
       className="flex flex-col w-full h-full bg-background"
@@ -987,9 +1168,19 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
       {/* Top Bar */}
       <div className="flex items-center gap-2 p-2 border-b bg-background">
         <div className="flex items-center gap-1">
-          <h1 className="text-lg font-bold mr-3">
-            MAGNET Test<sup className="text-xs">TM</sup> Live
-          </h1>
+          <Link
+            to="/"
+            className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+          >
+            <img
+              src="/iconic-logo.png"
+              alt="Iconic Digital World Logo"
+              className="h-8 w-8"
+            />
+            <h1 className="text-lg font-bold">
+              MAGNET Test<sup className="text-xs">TM</sup> Live
+            </h1>
+          </Link>
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -1122,6 +1313,211 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
           <div className="w-px h-6 bg-border mx-1" />
         </div>
 
+        {/* Annotation Tools */}
+        <div className="flex items-center gap-1">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={showAnnotationTools ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => {
+                    if (!showAnnotationTools) {
+                      setShowAnnotationTools(true);
+                      setAnnotationTool("pen");
+                      setClearMode("none");
+                    } else {
+                      setShowAnnotationTools(false);
+                      setAnnotationTool("none");
+                      setClearMode("none");
+                    }
+                  }}
+                >
+                  <Pen className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {showAnnotationTools
+                  ? "Hide Annotation Tools"
+                  : "Activate Pen Tool"}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
+          {showAnnotationTools && (
+            <>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant={
+                        annotationTool === "select" ? "default" : "ghost"
+                      }
+                      size="sm"
+                      onClick={() => {
+                        setAnnotationTool("select");
+                        setClearMode("none");
+                      }}
+                    >
+                      <MousePointer className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Select</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant={
+                        annotationTool === "highlighter" ? "default" : "ghost"
+                      }
+                      size="sm"
+                      onClick={() => {
+                        setAnnotationTool("highlighter");
+                        setClearMode("none");
+                      }}
+                    >
+                      <Highlighter className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Highlighter</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant={annotationTool === "text" ? "default" : "ghost"}
+                      size="sm"
+                      onClick={() => {
+                        setAnnotationTool("text");
+                        setClearMode("none");
+                      }}
+                    >
+                      <Type className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Text</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant={annotationTool === "arrow" ? "default" : "ghost"}
+                      size="sm"
+                      onClick={() => {
+                        setAnnotationTool("arrow");
+                        setClearMode("none");
+                      }}
+                    >
+                      <ArrowTool className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Arrow</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant={
+                        annotationTool === "rectangle" ? "default" : "ghost"
+                      }
+                      size="sm"
+                      onClick={() => {
+                        setAnnotationTool("rectangle");
+                        setClearMode("none");
+                      }}
+                    >
+                      <Square className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Rectangle</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+
+              {/* Color Picker */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="sm">
+                    <div
+                      className="h-4 w-4 rounded border border-gray-300"
+                      style={{ backgroundColor: annotationColor }}
+                    />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="center">
+                  <div className="grid grid-cols-4 gap-2 p-2">
+                    {annotationColors.map((color) => (
+                      <button
+                        key={color.value}
+                        onClick={() => setAnnotationColor(color.value)}
+                        className={`h-8 w-8 rounded border-2 transition-all ${
+                          annotationColor === color.value
+                            ? "border-primary scale-110"
+                            : "border-gray-300 hover:scale-105"
+                        }`}
+                        style={{ backgroundColor: color.value }}
+                        title={color.name}
+                      />
+                    ))}
+                  </div>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              {/* Clear Annotations Dropdown */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant={clearMode !== "none" ? "default" : "ghost"}
+                    size="sm"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="center">
+                  <DropdownMenuItem
+                    onClick={() => handleClearModeChange("all")}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Clear All Annotations
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() =>
+                      handleClearModeChange(
+                        clearMode === "erase" ? "none" : "erase",
+                      )
+                    }
+                  >
+                    <Eraser className="h-4 w-4 mr-2" />
+                    {clearMode === "erase" ? "Exit Eraser Mode" : "Eraser Mode"}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() =>
+                      handleClearModeChange(
+                        clearMode === "select" ? "none" : "select",
+                      )
+                    }
+                  >
+                    <MousePointer className="h-4 w-4 mr-2" />
+                    {clearMode === "select"
+                      ? "Exit Select Mode"
+                      : "Select & Delete"}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <div className="w-px h-6 bg-border mx-1" />
+            </>
+          )}
+        </div>
+
         {/* Review Tools */}
         <div className="flex items-center">
           <TooltipProvider>
@@ -1139,6 +1535,24 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
                 {isMagnetPanelOpen
                   ? "Close MAGNET Review"
                   : "Open MAGNET Review"}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
+          {/* Notes Tool */}
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={isNotesOpen ? "default" : "ghost"}
+                  size="sm"
+                  onClick={toggleNotes}
+                >
+                  <StickyNote className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {isNotesOpen ? "Close Notes" : "Open Notes"}
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
@@ -1338,7 +1752,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
               }}
             />
 
-            {/* Placeholder for future annotation overlay */}
+            {/* Annotation overlay */}
             <LiveAnnotationOverlay
               key={`overlay-${magnetActiveTab}`}
               reviewId={reviewId}
@@ -1349,8 +1763,15 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
               scrollTop={scrollPosition.y}
               scrollLeft={scrollPosition.x}
               zoomLevel={isFullscreen ? 1.0 : zoomLevel}
-              isVisible={false}
+              isVisible={showAnnotationTools}
               iframeRef={iframeRef}
+              activeTool={annotationTool}
+              selectedColor={annotationColor}
+              clearMode={clearMode}
+              onClearComplete={handleClearComplete}
+              onAnnotationChange={(annotations) => {
+                console.log("Annotations changed:", annotations);
+              }}
             />
           </div>
         </div>
@@ -1366,7 +1787,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
               className={`h-[92vh] flex flex-col relative ${
                 isMagnetPanelMinimized
                   ? ""
-                  : "bg-background border rounded-lg shadow-2xl overflow-hidden"
+                  : "bg-background border rounded-lg shadow-2xl overflow-hidden my-[0px] pt-[7px]"
               }`}
             >
               {/* Minimize/Expand Toggle - positioned at the right edge - only show when not minimized */}
@@ -1459,6 +1880,137 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
                   />
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Floating Notes Panel */}
+        {isNotesOpen && (
+          <div className="fixed right-4 top-1/2 -translate-y-1/2 z-50 animate-in slide-in-from-right-4 duration-300 w-[320px]">
+            <div className="h-[500px] flex flex-col bg-background border rounded-lg shadow-2xl overflow-hidden">
+              {/* Notes Header */}
+              <div className="flex items-center justify-between p-3 border-b bg-muted/50">
+                <div className="flex items-center gap-2">
+                  <StickyNote className="h-4 w-4" />
+                  <h3 className="text-sm font-semibold">Review Notes</h3>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={saveNotes}
+                    className="h-7 w-7 p-0"
+                  >
+                    <Save className="h-3 w-3" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={toggleNotes}
+                    className="h-7 w-7 p-0"
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+
+              {/* Formatting Toolbar */}
+              <div className="flex items-center gap-1 p-2 border-b bg-muted/30">
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => insertFormatting("bold")}
+                        className="h-7 w-7 p-0"
+                      >
+                        <Bold className="h-3 w-3" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Bold</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => insertFormatting("italic")}
+                        className="h-7 w-7 p-0"
+                      >
+                        <Italic className="h-3 w-3" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Italic</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+
+                <div className="w-px h-4 bg-border mx-1" />
+
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => insertFormatting("list")}
+                        className="h-7 w-7 p-0"
+                      >
+                        <List className="h-3 w-3" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Bullet List</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => insertFormatting("numbered")}
+                        className="h-7 w-7 p-0"
+                      >
+                        <ListOrdered className="h-3 w-3" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Numbered List</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+
+              {/* Notes Content */}
+              <div className="flex-1 p-3">
+                <textarea
+                  ref={notesRef}
+                  value={noteContent}
+                  onChange={(e) => setNoteContent(e.target.value)}
+                  placeholder="Add your review notes here...\n\nUse the toolbar above for formatting:\n• **bold text**\n• *italic text*\n• Bullet lists\n• Numbered lists"
+                  className="w-full h-full resize-none border-0 bg-transparent text-sm focus:outline-none focus:ring-0 placeholder:text-muted-foreground/60"
+                  style={{
+                    fontFamily:
+                      'ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, Consolas, "DejaVu Sans Mono", monospace',
+                  }}
+                />
+              </div>
+
+              {/* Notes Footer */}
+              <div className="p-2 border-t bg-muted/30">
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>
+                    {noteContent.length > 0
+                      ? `${noteContent.length} characters`
+                      : "No content"}
+                  </span>
+                  {lastSaved && (
+                    <span>Saved {lastSaved.toLocaleTimeString()}</span>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         )}

@@ -543,7 +543,9 @@ const MagnetReviewPanelInner: React.FC<MagnetReviewPanelProps> = ({
                           )}
                         </CardTitle>
                       </CardHeader>
-                      <CardContent className={isAnswered ? "opacity-75" : ""}>
+                      <CardContent
+                        className={`overflow-hidden ${isAnswered ? "opacity-75" : ""}`}
+                      >
                         {question.type === "multiple_choice" ? (
                           <div className="space-y-3">
                             <RadioGroup
@@ -836,7 +838,7 @@ const MagnetReviewPanelInner: React.FC<MagnetReviewPanelProps> = ({
                             <Separator className="my-2" />
                             <Textarea
                               placeholder="Add notes (optional)"
-                              className="min-h-[60px] text-sm"
+                              className="min-h-[60px] text-sm w-full max-w-full"
                               value={responses[question.id]?.notes || ""}
                               onChange={(e) =>
                                 handleNotesChange(question.id, e.target.value)
@@ -853,7 +855,7 @@ const MagnetReviewPanelInner: React.FC<MagnetReviewPanelProps> = ({
                                 {question.config?.rating?.maxLabel || "Max"}
                               </span>
                             </div>
-                            <div className="flex items-center space-x-2">
+                            <div className="flex items-center space-x-2 flex-wrap flex-shrink-0 gap-x-[0px] ml-[8px] ml-0.5 px-1 w-[188.39407873928712px] h-[51.165958842118016px]">
                               {Array.from(
                                 {
                                   length:
@@ -881,7 +883,7 @@ const MagnetReviewPanelInner: React.FC<MagnetReviewPanelProps> = ({
                                           value.toString(),
                                         )
                                       }
-                                      className="w-10 h-10"
+                                      className="flex-shrink-0 gap-x-0.5 ml-[5px] px-[5px] w-[30.68332308552226px] h-[35.85925470467657px] px-[8px] w-[31.19467713103154px] h-[32.231015804824324px] w-[28.081941028507345px] h-[29.12360896673988px] justify-center items-center flex-row"
                                     >
                                       {value}
                                     </Button>
@@ -892,7 +894,7 @@ const MagnetReviewPanelInner: React.FC<MagnetReviewPanelProps> = ({
                             <Separator className="my-2" />
                             <Textarea
                               placeholder="Add notes (optional)"
-                              className="min-h-[60px] text-sm"
+                              className="min-h-[60px] text-sm w-full max-w-full"
                               value={responses[question.id]?.notes || ""}
                               onChange={(e) =>
                                 handleNotesChange(question.id, e.target.value)
@@ -905,11 +907,11 @@ const MagnetReviewPanelInner: React.FC<MagnetReviewPanelProps> = ({
                               question.config?.text?.placeholder ||
                               "Enter your response"
                             }
-                            className={
+                            className={`w-full max-w-full ${
                               question.config?.text?.multiline
                                 ? "min-h-[100px]"
                                 : "min-h-[60px]"
-                            }
+                            }`}
                             maxLength={question.config?.text?.maxLength}
                             value={responses[question.id]?.notes || ""}
                             onChange={(e) =>

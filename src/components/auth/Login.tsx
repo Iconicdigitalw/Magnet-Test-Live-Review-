@@ -56,10 +56,29 @@ export default function Login() {
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <Card className="w-full max-w-sm">
         <CardHeader>
+          <div className="flex items-center justify-center mb-4">
+            <Link
+              to="/"
+              className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+            >
+              <img
+                src="/iconic-logo.png"
+                alt="Iconic Digital World Logo"
+                className="h-8 w-8"
+              />
+              <span className="text-lg font-bold">
+                MAGNET Test<sup className="text-xs">TM</sup> Live
+              </span>
+            </Link>
+          </div>
           <CardTitle>Admin Login</CardTitle>
           <CardDescription>
             Sign in to access MAGNET Admin Settings
           </CardDescription>
+          <div className="text-xs text-muted-foreground mt-2 p-2 bg-muted rounded">
+            Demo credentials: <strong>demo@magnet.app</strong> /{" "}
+            <strong>demo123</strong>
+          </div>
         </CardHeader>
         <CardContent>
           <form onSubmit={onSubmit} className="space-y-4">

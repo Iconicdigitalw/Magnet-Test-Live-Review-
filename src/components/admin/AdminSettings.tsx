@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { Link } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -638,7 +639,13 @@ const SortableQuestionCard: React.FC<SortableQuestionCardProps> = ({
   );
 };
 
-const AdminSettings: React.FC = () => {
+interface AdminSettingsProps {
+  defaultTab?: string;
+}
+
+const AdminSettings: React.FC<AdminSettingsProps> = ({
+  defaultTab = "questions",
+}) => {
   // Add error boundary for context
   let settingsContext;
   try {
@@ -921,9 +928,19 @@ const AdminSettings: React.FC = () => {
               Back to App
             </Button>
             <div className="w-px h-6 bg-border" />
-            <h1 className="text-xl font-bold">
-              MAGNET Test<sup className="text-xs">TM</sup> Live Admin Settings
-            </h1>
+            <Link
+              to="/"
+              className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+            >
+              <img
+                src="/iconic-logo.png"
+                alt="Iconic Digital World Logo"
+                className="h-8 w-8"
+              />
+              <h1 className="text-xl font-bold">
+                MAGNET Test<sup className="text-xs">TM</sup> Live Admin Settings
+              </h1>
+            </Link>
           </div>
           <Button variant="ghost" onClick={handleBackToApp}>
             <Home className="h-5 w-5" />
@@ -993,7 +1010,7 @@ const AdminSettings: React.FC = () => {
           </div>
         </div>
 
-        <Tabs defaultValue="questions" className="space-y-4">
+        <Tabs defaultValue={defaultTab} className="space-y-4">
           <TabsList>
             <TabsTrigger value="questions">
               <Settings className="mr-2 h-4 w-4" />
@@ -1003,141 +1020,7 @@ const AdminSettings: React.FC = () => {
               <BarChart3 className="mr-2 h-4 w-4" />
               Score Analytics
             </TabsTrigger>
-            <TabsTrigger value="users">
-              <Users className="mr-2 h-4 w-4" />
-              User Management
-            </TabsTrigger>
           </TabsList>
-
-          <TabsContent value="users" className="space-y-4">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Add User */}
-              <Card className="lg:col-span-1">
-                <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <UserPlus className="h-4 w-4" /> Add New User
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="user-email">Email</Label>
-                    <Input
-                      id="user-email"
-                      type="email"
-                      placeholder="name@example.com"
-                      value={newUserEmail}
-                      onChange={(e) => setNewUserEmail(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="user-password">Password</Label>
-                    <Input
-                      id="user-password"
-                      type="password"
-                      placeholder="Enter password"
-                      value={newUserPassword}
-                      onChange={(e) => setNewUserPassword(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="user-role">Role</Label>
-                    <Select
-                      value={newUserRole}
-                      onValueChange={(v) => setNewUserRole(v as any)}
-                    >
-                      <SelectTrigger id="user-role">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="user">User</SelectItem>
-                        <SelectItem value="admin">Admin</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <Button onClick={handleCreateUser} disabled={isCreatingUser}>
-                    <Save className="mr-2 h-4 w-4" />
-                    {isCreatingUser ? "Creating..." : "Create User"}
-                  </Button>
-                  <Separator />
-                  <p className="text-xs text-muted-foreground">
-                    Quick tip: A demo admin user is available by default — email
-                    "demo@magnet.app" and password "demo123".
-                  </p>
-                </CardContent>
-              </Card>
-
-              {/* Users List */}
-              <Card className="lg:col-span-2">
-                <CardHeader>
-                  <CardTitle className="text-lg">Existing Users</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    <div className="grid grid-cols-12 gap-2 text-sm font-medium text-muted-foreground">
-                      <div className="col-span-6">Email</div>
-                      <div className="col-span-3">Role</div>
-                      <div className="col-span-3 text-right">Actions</div>
-                    </div>
-                    <Separator />
-                    {users.map((u) => (
-                      <div
-                        key={u.id}
-                        className="grid grid-cols-12 gap-2 items-center py-2"
-                      >
-                        <div className="col-span-6 break-all">{u.email}</div>
-                        <div className="col-span-3">
-                          <Badge
-                            variant={
-                              u.role === "admin" ? "default" : "secondary"
-                            }
-                          >
-                            {u.role}
-                          </Badge>
-                        </div>
-                        <div className="col-span-3 text-right">
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                disabled={currentUser?.id === u.id}
-                                title={
-                                  currentUser?.id === u.id
-                                    ? "You cannot delete the currently signed-in account"
-                                    : "Delete user"
-                                }
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>
-                                  Delete user?
-                                </AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  This will permanently delete the user &quot;
-                                  {u.email}&quot;. This action cannot be undone.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction
-                                  onClick={() => handleDeleteUser(u.id)}
-                                >
-                                  Delete
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
 
           <TabsContent value="questions" className="space-y-4">
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
