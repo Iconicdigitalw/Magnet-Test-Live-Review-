@@ -189,14 +189,14 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
 
   // Recording control tray state
   const [showRecordingTray, setShowRecordingTray] = useState<boolean>(false);
-  const [isRecordingTrayMinimized, setIsRecordingTrayMinimized] =
-    useState<boolean>(false);
   const [recordingCountdown, setRecordingCountdown] = useState<number>(0);
   const [isRecordingPaused, setIsRecordingPaused] = useState<boolean>(false);
   const [recordingStartTime, setRecordingStartTime] = useState<Date | null>(
     null,
   );
   const [recordingDuration, setRecordingDuration] = useState<number>(0);
+  const [showRecordingControlDialog, setShowRecordingControlDialog] =
+    useState<boolean>(false);
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -1143,7 +1143,6 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
     setIsRecordingPaused(false);
     setRecordingStartTime(new Date());
     setShowRecordingTray(true);
-    setIsRecordingTrayMinimized(false);
 
     toast({
       title: "Recording started",
@@ -1506,6 +1505,8 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
     <div
       className="flex flex-col w-full h-full bg-background"
       ref={containerRef}
+      tabIndex={-1}
+      style={{ outline: "none" }}
     >
       {/* Top Bar */}
       <div className="flex items-center gap-2 p-2 border-b bg-background">
@@ -2015,7 +2016,8 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
                   size="sm"
                   onClick={() => {
                     if (isRecording) {
-                      stopRecording();
+                      // When recording, show confirmation dialog instead of stopping immediately
+                      setShowRecordingControlDialog(true);
                     } else {
                       setShowRecordingDialog(true);
                     }
@@ -2027,7 +2029,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                {isRecording ? "Stop Recording" : "Start Recording"}
+                {isRecording ? "Recording Controls" : "Start Recording"}
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
@@ -2069,6 +2071,60 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
           </TooltipProvider>
         </div>
       </div>
+
+      {/* Compact Recording Control Strip */}
+      {showRecordingTray && (
+        <div className="absolute top-12 right-4 z-50 animate-in slide-in-from-top-2 duration-300">
+          <div className="bg-background/95 backdrop-blur-sm border border-border rounded-lg shadow-lg px-2 py-1 flex items-center gap-2">
+            {/* Recording Status */}
+            <div className="flex items-center gap-1">
+              <div
+                className={`w-1.5 h-1.5 rounded-full ${
+                  isRecordingPaused
+                    ? "bg-yellow-500"
+                    : "bg-red-500 animate-pulse"
+                }`}
+              ></div>
+              <span className="text-xs font-mono font-medium text-red-500">
+                {formatDuration(recordingDuration)}
+              </span>
+            </div>
+
+            {/* Controls */}
+            <div className="flex items-center gap-0.5">
+              {isRecordingPaused ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={resumeRecording}
+                  className="h-5 w-5 p-0 hover:bg-green-100 hover:text-green-600"
+                >
+                  <Play className="h-2.5 w-2.5" />
+                </Button>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={pauseRecording}
+                  className="h-5 w-5 p-0 hover:bg-yellow-100 hover:text-yellow-600"
+                >
+                  <Pause className="h-2.5 w-2.5" />
+                </Button>
+              )}
+
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowRecordingControlDialog(true)}
+                className="h-5 w-5 p-0 hover:bg-red-100 hover:text-red-600"
+              >
+                <StopCircle className="h-2.5 w-2.5" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Viewport container */}
       <div className="relative flex-1">
         <div
@@ -2436,134 +2492,67 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
           </div>
         )}
 
-        {/* Recording Control Tray */}
-        {showRecordingTray && (
-          <div className="fixed bottom-4 right-4 z-50 animate-in slide-in-from-bottom-4 duration-300">
-            <div
-              className={`bg-background border rounded-lg shadow-2xl overflow-hidden transition-all duration-300 ${
-                isRecordingTrayMinimized ? "w-12 h-12" : "w-80 h-auto"
-              }`}
-            >
-              {isRecordingTrayMinimized ? (
-                // Minimized tray - just an icon
-                <div className="w-full h-full flex items-center justify-center">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setIsRecordingTrayMinimized(false)}
-                    className="w-full h-full p-0"
-                  >
-                    <Video
-                      className={`h-5 w-5 ${isRecording && !isRecordingPaused ? "text-red-500 animate-pulse" : "text-muted-foreground"}`}
-                    />
-                  </Button>
-                </div>
-              ) : (
-                // Expanded tray
-                <>
-                  {/* Tray Header */}
-                  <div className="flex items-center justify-between p-3 border-b bg-muted/50">
-                    <div className="flex items-center gap-2">
-                      <Video
-                        className={`h-4 w-4 ${isRecording && !isRecordingPaused ? "text-red-500 animate-pulse" : "text-muted-foreground"}`}
-                      />
-                      <h3 className="text-sm font-semibold">
-                        {isRecordingPaused
-                          ? "Recording Paused"
-                          : "Recording Active"}
-                      </h3>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setIsRecordingTrayMinimized(true)}
-                      className="h-6 w-6 p-0"
-                    >
-                      <Minimize2 className="h-3 w-3" />
-                    </Button>
-                  </div>
+        {/* Recording Stop Confirmation Dialog */}
+        <Dialog
+          open={showRecordingControlDialog}
+          onOpenChange={setShowRecordingControlDialog}
+        >
+          <DialogContent className="sm:max-w-[400px]">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <StopCircle className="h-5 w-5 text-red-500" />
+                Stop Recording?
+              </DialogTitle>
+              <DialogDescription>
+                Are you sure you want to stop the current recording? This action
+                cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
 
-                  {/* Recording Status */}
-                  <div className="p-3 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">
-                        Duration:
-                      </span>
-                      <span className="text-sm font-mono font-medium">
-                        {formatDuration(recordingDuration)}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">
-                        Status:
-                      </span>
-                      <div className="flex items-center gap-1">
-                        <div
-                          className={`w-2 h-2 rounded-full ${
-                            isRecordingPaused
-                              ? "bg-yellow-500"
-                              : "bg-red-500 animate-pulse"
-                          }`}
-                        ></div>
-                        <span className="text-xs font-medium">
-                          {isRecordingPaused ? "Paused" : "Recording"}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Control Buttons */}
-                    <div className="flex items-center gap-2 pt-2">
-                      {isRecordingPaused ? (
-                        <Button
-                          variant="default"
-                          size="sm"
-                          onClick={resumeRecording}
-                          className="flex-1 h-8"
-                        >
-                          <Play className="h-3 w-3 mr-1" />
-                          Resume
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={pauseRecording}
-                          className="flex-1 h-8"
-                        >
-                          <Pause className="h-3 w-3 mr-1" />
-                          Pause
-                        </Button>
-                      )}
-
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={stopRecording}
-                        className="flex-1 h-8"
-                      >
-                        <StopCircle className="h-3 w-3 mr-1" />
-                        Stop
-                      </Button>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={changeRecordingPermissions}
-                        className="flex-1 h-8"
-                      >
-                        <Settings className="h-3 w-3 mr-1" />
-                        Settings
-                      </Button>
-                    </div>
-                  </div>
-                </>
-              )}
+            <div className="py-4">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>
+                <span>
+                  Recording duration: {formatDuration(recordingDuration)}
+                </span>
+              </div>
             </div>
-          </div>
-        )}
+
+            <DialogFooter className="flex items-center justify-between">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowRecordingControlDialog(false);
+                  // Ensure focus returns to the main container after dialog closes
+                  setTimeout(() => {
+                    if (containerRef.current) {
+                      containerRef.current.focus();
+                    }
+                  }, 100);
+                }}
+              >
+                Continue Recording
+              </Button>
+              <Button
+                onClick={() => {
+                  stopRecording();
+                  setShowRecordingControlDialog(false);
+                  // Ensure focus returns to the main container after dialog closes
+                  setTimeout(() => {
+                    if (containerRef.current) {
+                      containerRef.current.focus();
+                    }
+                  }, 100);
+                }}
+                variant="destructive"
+                className="flex items-center gap-2"
+              >
+                <StopCircle className="h-4 w-4" />
+                Stop Recording
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Recording Options Dialog */}
         <Dialog
