@@ -39,6 +39,8 @@ import {
   List,
   ListOrdered,
   Save,
+  Settings,
+  Timer,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -63,6 +65,17 @@ import {
 import LiveAnnotationOverlay from "./LiveAnnotationOverlay";
 import MagnetReviewPanel from "./MagnetReviewPanel";
 import { toast } from "@/components/ui/use-toast";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 
 interface AnnotationWorkspaceProps {
   url?: string;
@@ -132,7 +145,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
   >([]);
   const [showUrlDropdown, setShowUrlDropdown] = useState<boolean>(false);
   const [selectedDevice, setSelectedDevice] = useState<string>("desktop");
-  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(true);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [scrollPosition, setScrollPosition] = useState<{
     x: number;
@@ -163,6 +176,27 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
   const [isNotesOpen, setIsNotesOpen] = useState<boolean>(false);
   const [noteContent, setNoteContent] = useState<string>("");
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [showRecordingDialog, setShowRecordingDialog] =
+    useState<boolean>(false);
+  const [recordingOptions, setRecordingOptions] = useState({
+    entireApp: true,
+    magnetWindow: true,
+    annotations: true,
+    screenshots: true,
+    externalTabs: false,
+    entireDesktop: false,
+  });
+
+  // Recording control tray state
+  const [showRecordingTray, setShowRecordingTray] = useState<boolean>(false);
+  const [isRecordingTrayMinimized, setIsRecordingTrayMinimized] =
+    useState<boolean>(false);
+  const [recordingCountdown, setRecordingCountdown] = useState<number>(0);
+  const [isRecordingPaused, setIsRecordingPaused] = useState<boolean>(false);
+  const [recordingStartTime, setRecordingStartTime] = useState<Date | null>(
+    null,
+  );
+  const [recordingDuration, setRecordingDuration] = useState<number>(0);
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -432,9 +466,10 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
       if (error instanceof Error) {
         if (error.name === "NotAllowedError") {
           errorTitle = "Permission denied";
-          errorMessage = "Screen capture permission was denied.";
+          errorMessage =
+            "Screen capture permission was denied or blocked by browser policy.";
           suggestions =
-            "Please allow screen capture and select the current browser tab.";
+            "Please allow screen capture permissions in your browser settings and ensure you're using HTTPS. Try refreshing the page and selecting this browser tab when prompted.";
         } else if (error.name === "NotSupportedError") {
           errorTitle = "Not supported";
           errorMessage = "Screen capture is not supported in this browser.";
@@ -566,7 +601,8 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
 
       if (error instanceof Error && error.name === "NotAllowedError") {
         errorTitle = "Permission denied";
-        errorMessage = "Screen capture permission was denied.";
+        errorMessage =
+          "Screen capture permission was denied or blocked by browser policy. Please allow screen capture permissions and try again.";
       }
 
       toast({
@@ -902,60 +938,121 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
     }
   };
 
+  // Recording options handlers
+  const handleRecordingOptionChange = (
+    option: keyof typeof recordingOptions,
+    checked: boolean,
+  ) => {
+    setRecordingOptions((prev) => ({
+      ...prev,
+      [option]: checked,
+    }));
+  };
+
+  const getRecordingDescription = () => {
+    const activeOptions = [];
+    if (recordingOptions.entireApp) activeOptions.push("App Interface");
+    if (recordingOptions.magnetWindow) activeOptions.push("MAGNET Panel");
+    if (recordingOptions.annotations) activeOptions.push("Annotations");
+    if (recordingOptions.screenshots) activeOptions.push("Screenshots");
+    if (recordingOptions.externalTabs) activeOptions.push("External Tabs");
+    if (recordingOptions.entireDesktop) activeOptions.push("Entire Desktop");
+
+    if (activeOptions.length === 0) return "No recording options selected";
+    if (activeOptions.length === 1) return `Recording: ${activeOptions[0]}`;
+    if (activeOptions.length === 2)
+      return `Recording: ${activeOptions.join(" & ")}`;
+    return `Recording: ${activeOptions.slice(0, -1).join(", ")} & ${activeOptions[activeOptions.length - 1]}`;
+  };
+
   // Screen recording handlers
   const startRecording = async () => {
     try {
-      const stream = await (navigator.mediaDevices as any).getDisplayMedia({
-        video: { mediaSource: "screen" },
-        audio: true,
-      });
-      if (!stream) return;
-
-      const recorder = new MediaRecorder(stream, {
-        mimeType: MediaRecorder.isTypeSupported("video/webm; codecs=vp9")
-          ? "video/webm; codecs=vp9"
-          : "video/webm",
-      });
-
-      const chunks: BlobPart[] = [];
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) chunks.push(event.data);
-      };
-      stream.getVideoTracks()[0].onended = () => {
-        if (recorder && recorder.state !== "inactive") {
-          recorder.stop();
-          setIsRecording(false);
-          setMediaRecorder(null);
-        }
-      };
-      recorder.onstop = () => {
-        const blob = new Blob(chunks, { type: "video/webm" });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = `magnet-review-${Date.now()}.webm`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-        stream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
+      // Check if any options are selected
+      const hasActiveOptions = Object.values(recordingOptions).some(
+        (option) => option,
+      );
+      if (!hasActiveOptions) {
         toast({
-          title: "Recording saved",
+          title: "No recording options selected",
           description:
-            "Your screen recording has been saved to your downloads folder.",
+            "Please select at least one recording option to continue.",
+          variant: "destructive",
           duration: 3000,
         });
+        return;
+      }
+
+      // Check if we need to show the screen sharing dialog
+      const needsScreenShareDialog =
+        recordingOptions.externalTabs || recordingOptions.entireDesktop;
+
+      let mediaConstraints: any = {
+        video: {},
+        audio: true,
       };
 
-      recorder.start(1000);
-      setMediaRecorder(recorder);
-      setIsRecording(true);
-      toast({
-        title: "Recording started",
-        description:
-          "Your screen is now being recorded. Click the stop button when finished.",
-        duration: 3000,
-      });
+      // Request permission first and wait for consent dialogs to close
+      let stream: MediaStream;
+
+      if (needsScreenShareDialog) {
+        // For external tabs or entire desktop, use getDisplayMedia which shows the dialog
+        if (recordingOptions.entireDesktop) {
+          mediaConstraints.video.mediaSource = "screen";
+        } else if (recordingOptions.externalTabs) {
+          mediaConstraints.video.mediaSource = "browser";
+        }
+
+        toast({
+          title: "Requesting screen access",
+          description:
+            "Please grant permission and select what to share. Recording will start after consent dialogs close.",
+          duration: 4000,
+        });
+
+        stream = await (navigator.mediaDevices as any).getDisplayMedia(
+          mediaConstraints,
+        );
+      } else {
+        // For app-only recording, try to capture the current tab directly
+        try {
+          // Use getDisplayMedia but with constraints that prefer current tab
+          mediaConstraints.video = {
+            mediaSource: "browser",
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+          };
+          mediaConstraints.preferCurrentTab = true;
+
+          toast({
+            title: "Requesting screen access",
+            description:
+              "Please grant permission. Recording will start after consent dialogs close.",
+            duration: 4000,
+          });
+
+          stream = await (navigator.mediaDevices as any).getDisplayMedia(
+            mediaConstraints,
+          );
+        } catch (error) {
+          // Fallback to regular getDisplayMedia if preferCurrentTab fails
+          console.log(
+            "Direct tab capture failed, falling back to display media",
+          );
+          stream = await (navigator.mediaDevices as any).getDisplayMedia({
+            video: { mediaSource: "browser" },
+            audio: true,
+          });
+        }
+      }
+
+      if (!stream) return;
+
+      // Wait a moment for consent dialogs to fully close
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      // Start countdown timer
+      startCountdownTimer(stream);
     } catch (error) {
       console.error("Error starting recording:", error);
       toast({
@@ -968,17 +1065,166 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
     }
   };
 
-  const stopRecording = () => {
+  // Countdown timer before actual recording starts
+  const startCountdownTimer = (stream: MediaStream) => {
+    setShowRecordingDialog(false);
+    setRecordingCountdown(3);
+
+    toast({
+      title: "Recording will start in 3 seconds",
+      description: "Get ready! The recording will begin after the countdown.",
+      duration: 3000,
+    });
+
+    const countdownInterval = setInterval(() => {
+      setRecordingCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(countdownInterval);
+          setRecordingCountdown(0);
+          // Start actual recording
+          startRecordingWithStream(stream);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  // Helper function to start recording with a given stream
+  const startRecordingWithStream = (stream: MediaStream) => {
+    const recorder = new MediaRecorder(stream, {
+      mimeType: MediaRecorder.isTypeSupported("video/webm; codecs=vp9")
+        ? "video/webm; codecs=vp9"
+        : "video/webm",
+    });
+
+    const chunks: BlobPart[] = [];
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) chunks.push(event.data);
+    };
+    stream.getVideoTracks()[0].onended = () => {
+      if (recorder && recorder.state !== "inactive") {
+        recorder.stop();
+        setIsRecording(false);
+        setMediaRecorder(null);
+        setShowRecordingTray(false);
+        setRecordingStartTime(null);
+        setRecordingDuration(0);
+      }
+    };
+    recorder.onstop = () => {
+      const blob = new Blob(chunks, { type: "video/webm" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      link.href = url;
+      link.download = `magnet-review-${timestamp}.webm`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      stream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
+
+      // Hide recording tray
+      setShowRecordingTray(false);
+      setRecordingStartTime(null);
+      setRecordingDuration(0);
+
+      toast({
+        title: "Recording saved",
+        description: `Your MAGNET review recording has been saved successfully.`,
+        duration: 3000,
+      });
+    };
+
+    recorder.start(1000);
+    setMediaRecorder(recorder);
+    setIsRecording(true);
+    setIsRecordingPaused(false);
+    setRecordingStartTime(new Date());
+    setShowRecordingTray(true);
+    setIsRecordingTrayMinimized(false);
+
+    toast({
+      title: "Recording started",
+      description: getRecordingDescription(),
+      duration: 4000,
+    });
+  };
+
+  // Pause recording
+  const pauseRecording = () => {
     if (mediaRecorder && mediaRecorder.state === "recording") {
+      mediaRecorder.pause();
+      setIsRecordingPaused(true);
+      toast({
+        title: "Recording paused",
+        description: "Click resume to continue recording.",
+        duration: 2000,
+      });
+    }
+  };
+
+  // Resume recording
+  const resumeRecording = () => {
+    if (mediaRecorder && mediaRecorder.state === "paused") {
+      mediaRecorder.resume();
+      setIsRecordingPaused(false);
+      toast({
+        title: "Recording resumed",
+        description: "Recording is now active again.",
+        duration: 2000,
+      });
+    }
+  };
+
+  // Change recording permissions
+  const changeRecordingPermissions = () => {
+    setShowRecordingDialog(true);
+  };
+
+  const stopRecording = () => {
+    if (
+      mediaRecorder &&
+      (mediaRecorder.state === "recording" || mediaRecorder.state === "paused")
+    ) {
       mediaRecorder.stop();
       setIsRecording(false);
+      setIsRecordingPaused(false);
       setMediaRecorder(null);
+      setShowRecordingTray(false);
+      setRecordingStartTime(null);
+      setRecordingDuration(0);
       toast({
         title: "Recording stopped",
         description: "Processing your recording...",
         duration: 2000,
       });
     }
+  };
+
+  // Update recording duration
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isRecording && recordingStartTime && !isRecordingPaused) {
+      interval = setInterval(() => {
+        const now = new Date();
+        const duration = Math.floor(
+          (now.getTime() - recordingStartTime.getTime()) / 1000,
+        );
+        setRecordingDuration(duration);
+      }, 1000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isRecording, recordingStartTime, isRecordingPaused]);
+
+  // Format duration for display
+  const formatDuration = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
   // Iframe load
@@ -1314,7 +1560,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
         </div>
 
         {/* Browser Controls */}
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5">
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -1440,7 +1686,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
         </div>
 
         {/* Zoom Controls */}
-        <div className="flex items-center">
+        <div className="flex items-center gap-1.5">
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -1483,12 +1729,12 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
         </div>
 
         {/* Annotation Tools */}
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5">
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
-                  variant={showAnnotationTools ? "default" : "ghost"}
+                  variant={showAnnotationTools ? "active-grey" : "ghost"}
                   size="sm"
                   onClick={() => {
                     if (!showAnnotationTools) {
@@ -1520,7 +1766,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
                   <TooltipTrigger asChild>
                     <Button
                       variant={
-                        annotationTool === "select" ? "default" : "ghost"
+                        annotationTool === "select" ? "active-grey" : "ghost"
                       }
                       size="sm"
                       onClick={() => {
@@ -1540,7 +1786,9 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
                   <TooltipTrigger asChild>
                     <Button
                       variant={
-                        annotationTool === "highlighter" ? "default" : "ghost"
+                        annotationTool === "highlighter"
+                          ? "active-grey"
+                          : "ghost"
                       }
                       size="sm"
                       onClick={() => {
@@ -1559,7 +1807,9 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
-                      variant={annotationTool === "text" ? "default" : "ghost"}
+                      variant={
+                        annotationTool === "text" ? "active-grey" : "ghost"
+                      }
                       size="sm"
                       onClick={() => {
                         setAnnotationTool("text");
@@ -1577,7 +1827,9 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
-                      variant={annotationTool === "arrow" ? "default" : "ghost"}
+                      variant={
+                        annotationTool === "arrow" ? "active-grey" : "ghost"
+                      }
                       size="sm"
                       onClick={() => {
                         setAnnotationTool("arrow");
@@ -1596,7 +1848,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
                   <TooltipTrigger asChild>
                     <Button
                       variant={
-                        annotationTool === "rectangle" ? "default" : "ghost"
+                        annotationTool === "rectangle" ? "active-grey" : "ghost"
                       }
                       size="sm"
                       onClick={() => {
@@ -1644,7 +1896,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
-                    variant={clearMode !== "none" ? "default" : "ghost"}
+                    variant={clearMode !== "none" ? "active-grey" : "ghost"}
                     size="sm"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -1688,12 +1940,12 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
         </div>
 
         {/* Review Tools */}
-        <div className="flex items-center">
+        <div className="flex items-center gap-1.5">
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
-                  variant={isMagnetPanelOpen ? "default" : "ghost"}
+                  variant={isMagnetPanelOpen ? "active-grey" : "ghost"}
                   size="sm"
                   onClick={toggleMagnetPanel}
                 >
@@ -1713,7 +1965,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
-                  variant={isNotesOpen ? "default" : "ghost"}
+                  variant={isNotesOpen ? "active-grey" : "ghost"}
                   size="sm"
                   onClick={toggleNotes}
                 >
@@ -1755,53 +2007,34 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
           </DropdownMenu>
 
           {/* Screen Recorder */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm">
-                <Video
-                  className={`h-4 w-4 ${isRecording ? "text-red-500" : ""}`}
-                />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="center">
-              {!isRecording ? (
-                <>
-                  <DropdownMenuItem onClick={startRecording}>
-                    <Play className="h-4 w-4 mr-2" />
-                    Start Recording
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() =>
-                      toast({
-                        title: "Coming soon",
-                        description:
-                          "Area recording will be available in a future update.",
-                        duration: 3000,
-                      })
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    if (isRecording) {
+                      stopRecording();
+                    } else {
+                      setShowRecordingDialog(true);
                     }
-                  >
-                    <Square className="h-4 w-4 mr-2" />
-                    Record Area
-                  </DropdownMenuItem>
-                </>
-              ) : (
-                <>
-                  <DropdownMenuItem onClick={stopRecording}>
-                    <StopCircle className="h-4 w-4 mr-2 text-red-500" />
-                    Stop Recording
-                  </DropdownMenuItem>
-                  <DropdownMenuItem disabled>
-                    <Circle className="h-4 w-4 mr-2 text-red-500 animate-pulse" />
-                    Recording...
-                  </DropdownMenuItem>
-                </>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
+                  }}
+                >
+                  <Video
+                    className={`h-4 w-4 ${isRecording ? "text-red-500 animate-pulse" : ""}`}
+                  />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {isRecording ? "Stop Recording" : "Start Recording"}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
 
         {/* Right side - Device selector and fullscreen */}
-        <div className="flex items-center gap-1 ml-auto">
+        <div className="flex items-center gap-1.5 ml-auto">
           <Select value={selectedDevice} onValueChange={setSelectedDevice}>
             <SelectTrigger className="w-[120px] h-8 text-xs">
               <SelectValue placeholder="Device" />
@@ -1951,6 +2184,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
             className={`fixed left-4 top-1/2 -translate-y-1/2 z-50 animate-in slide-in-from-left-4 duration-300 ${
               isMagnetPanelMinimized ? "w-[60px]" : "w-[275px] max-w-[275px]"
             }`}
+            style={{ top: "calc(50% + 20px)" }}
           >
             <div
               className={`h-[92vh] flex flex-col relative ${
@@ -1961,12 +2195,12 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
             >
               {/* Minimize/Expand Toggle - positioned at the right edge - only show when not minimized */}
               {!isMagnetPanelMinimized && (
-                <div className="absolute -right-3 top-1/2 -translate-y-1/2 z-10">
+                <div className="absolute -right-2 top-1/2 -translate-y-1/2 z-10">
                   <Button
                     variant="default"
                     size="sm"
                     onClick={toggleMagnetPanelMinimize}
-                    className="h-8 w-6 p-0 rounded-l-lg rounded-r-none shadow-lg border-r-0"
+                    className="h-8 w-7 p-0 rounded-l-lg rounded-r-none shadow-lg border-r-0 flex items-center justify-center -mr-1"
                   >
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
@@ -1977,7 +2211,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
                 <>
                   <div className="flex items-center p-4 border-b justify-center h-0.5">
                     <h2 className="text-lg font-semibold leading-tight">
-                      What’s your MAGNET?
+                      What's your MAGNET?
                     </h2>
                     <Button
                       variant="ghost"
@@ -2183,6 +2417,333 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
             </div>
           </div>
         )}
+
+        {/* Recording Countdown Overlay */}
+        {recordingCountdown > 0 && (
+          <div className="fixed inset-0 flex items-center justify-center bg-black/60 z-50">
+            <div className="bg-background rounded-lg p-8 shadow-2xl text-center">
+              <div className="space-y-4">
+                <Timer className="h-12 w-12 mx-auto text-primary animate-pulse" />
+                <h3 className="text-2xl font-bold">Recording starts in</h3>
+                <div className="text-6xl font-bold text-primary animate-bounce">
+                  {recordingCountdown}
+                </div>
+                <p className="text-muted-foreground">
+                  Get ready! Make sure consent dialogs are closed.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Recording Control Tray */}
+        {showRecordingTray && (
+          <div className="fixed bottom-4 right-4 z-50 animate-in slide-in-from-bottom-4 duration-300">
+            <div
+              className={`bg-background border rounded-lg shadow-2xl overflow-hidden transition-all duration-300 ${
+                isRecordingTrayMinimized ? "w-12 h-12" : "w-80 h-auto"
+              }`}
+            >
+              {isRecordingTrayMinimized ? (
+                // Minimized tray - just an icon
+                <div className="w-full h-full flex items-center justify-center">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setIsRecordingTrayMinimized(false)}
+                    className="w-full h-full p-0"
+                  >
+                    <Video
+                      className={`h-5 w-5 ${isRecording && !isRecordingPaused ? "text-red-500 animate-pulse" : "text-muted-foreground"}`}
+                    />
+                  </Button>
+                </div>
+              ) : (
+                // Expanded tray
+                <>
+                  {/* Tray Header */}
+                  <div className="flex items-center justify-between p-3 border-b bg-muted/50">
+                    <div className="flex items-center gap-2">
+                      <Video
+                        className={`h-4 w-4 ${isRecording && !isRecordingPaused ? "text-red-500 animate-pulse" : "text-muted-foreground"}`}
+                      />
+                      <h3 className="text-sm font-semibold">
+                        {isRecordingPaused
+                          ? "Recording Paused"
+                          : "Recording Active"}
+                      </h3>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setIsRecordingTrayMinimized(true)}
+                      className="h-6 w-6 p-0"
+                    >
+                      <Minimize2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+
+                  {/* Recording Status */}
+                  <div className="p-3 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">
+                        Duration:
+                      </span>
+                      <span className="text-sm font-mono font-medium">
+                        {formatDuration(recordingDuration)}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">
+                        Status:
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <div
+                          className={`w-2 h-2 rounded-full ${
+                            isRecordingPaused
+                              ? "bg-yellow-500"
+                              : "bg-red-500 animate-pulse"
+                          }`}
+                        ></div>
+                        <span className="text-xs font-medium">
+                          {isRecordingPaused ? "Paused" : "Recording"}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Control Buttons */}
+                    <div className="flex items-center gap-2 pt-2">
+                      {isRecordingPaused ? (
+                        <Button
+                          variant="default"
+                          size="sm"
+                          onClick={resumeRecording}
+                          className="flex-1 h-8"
+                        >
+                          <Play className="h-3 w-3 mr-1" />
+                          Resume
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={pauseRecording}
+                          className="flex-1 h-8"
+                        >
+                          <Pause className="h-3 w-3 mr-1" />
+                          Pause
+                        </Button>
+                      )}
+
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={stopRecording}
+                        className="flex-1 h-8"
+                      >
+                        <StopCircle className="h-3 w-3 mr-1" />
+                        Stop
+                      </Button>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={changeRecordingPermissions}
+                        className="flex-1 h-8"
+                      >
+                        <Settings className="h-3 w-3 mr-1" />
+                        Settings
+                      </Button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Recording Options Dialog */}
+        <Dialog
+          open={showRecordingDialog}
+          onOpenChange={setShowRecordingDialog}
+        >
+          <DialogContent className="sm:max-w-[480px]">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Video className="h-5 w-5" />
+                Recording Options
+              </DialogTitle>
+              <DialogDescription>
+                Select what aspects of your MAGNET review you want to record.
+                This will help create a comprehensive review recording.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-4">
+              <div className="space-y-3">
+                <h4 className="text-sm font-medium text-muted-foreground">
+                  App Interface
+                </h4>
+                <div className="space-y-3 pl-2">
+                  <div className="flex items-center space-x-3">
+                    <Checkbox
+                      id="entire-app"
+                      checked={recordingOptions.entireApp}
+                      onCheckedChange={(checked) =>
+                        handleRecordingOptionChange(
+                          "entireApp",
+                          checked as boolean,
+                        )
+                      }
+                    />
+                    <Label htmlFor="entire-app" className="text-sm font-normal">
+                      Record entire app and everything shown on it
+                    </Label>
+                  </div>
+
+                  <div className="flex items-center space-x-3">
+                    <Checkbox
+                      id="magnet-window"
+                      checked={recordingOptions.magnetWindow}
+                      onCheckedChange={(checked) =>
+                        handleRecordingOptionChange(
+                          "magnetWindow",
+                          checked as boolean,
+                        )
+                      }
+                    />
+                    <Label
+                      htmlFor="magnet-window"
+                      className="text-sm font-normal"
+                    >
+                      MAGNET floating review panel
+                    </Label>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <h4 className="text-sm font-medium text-muted-foreground">
+                  Review Content
+                </h4>
+                <div className="space-y-3 pl-2">
+                  <div className="flex items-center space-x-3">
+                    <Checkbox
+                      id="annotations"
+                      checked={recordingOptions.annotations}
+                      onCheckedChange={(checked) =>
+                        handleRecordingOptionChange(
+                          "annotations",
+                          checked as boolean,
+                        )
+                      }
+                    />
+                    <Label
+                      htmlFor="annotations"
+                      className="text-sm font-normal"
+                    >
+                      Annotations and drawing tools
+                    </Label>
+                  </div>
+
+                  <div className="flex items-center space-x-3">
+                    <Checkbox
+                      id="screenshots"
+                      checked={recordingOptions.screenshots}
+                      onCheckedChange={(checked) =>
+                        handleRecordingOptionChange(
+                          "screenshots",
+                          checked as boolean,
+                        )
+                      }
+                    />
+                    <Label
+                      htmlFor="screenshots"
+                      className="text-sm font-normal"
+                    >
+                      Screenshots and annotations on screenshots
+                    </Label>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <h4 className="text-sm font-medium text-muted-foreground">
+                  Extended Capture
+                </h4>
+                <div className="space-y-3 pl-2">
+                  <div className="flex items-center space-x-3">
+                    <Checkbox
+                      id="external-tabs"
+                      checked={recordingOptions.externalTabs}
+                      onCheckedChange={(checked) =>
+                        handleRecordingOptionChange(
+                          "externalTabs",
+                          checked as boolean,
+                        )
+                      }
+                    />
+                    <Label
+                      htmlFor="external-tabs"
+                      className="text-sm font-normal text-muted-foreground"
+                    >
+                      External browser tabs
+                    </Label>
+                  </div>
+
+                  <div className="flex items-center space-x-3">
+                    <Checkbox
+                      id="entire-desktop"
+                      checked={recordingOptions.entireDesktop}
+                      onCheckedChange={(checked) =>
+                        handleRecordingOptionChange(
+                          "entireDesktop",
+                          checked as boolean,
+                        )
+                      }
+                    />
+                    <Label
+                      htmlFor="entire-desktop"
+                      className="text-sm font-normal text-muted-foreground"
+                    >
+                      Entire desktop
+                    </Label>
+                  </div>
+                </div>
+              </div>
+
+              {Object.values(recordingOptions).some((option) => option) && (
+                <div className="mt-4 p-3 bg-muted/50 rounded-lg">
+                  <p className="text-xs text-muted-foreground">
+                    <strong>Preview:</strong> {getRecordingDescription()}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <DialogFooter className="flex items-center justify-between">
+              <Button
+                variant="outline"
+                onClick={() => setShowRecordingDialog(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={startRecording}
+                disabled={
+                  !Object.values(recordingOptions).some((option) => option)
+                }
+                className="flex items-center gap-2"
+              >
+                <Play className="h-4 w-4" />
+                Start Recording
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
