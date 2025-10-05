@@ -37,7 +37,7 @@ const UserManagement: React.FC = () => {
   const [isCreatingUser, setIsCreatingUser] = useState(false);
 
   const handleBackToApp = () => {
-    window.location.href = "/";
+    window.location.href = "/dashboard";
   };
 
   const handleCreateUser = async () => {

@@ -845,8 +845,8 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({
   );
 
   const handleBackToApp = () => {
-    // Simple navigation back to home
-    window.location.href = "/";
+    // Simple navigation back to dashboard
+    window.location.href = "/dashboard";
   };
 
   // dnd-kit setup

@@ -21,8 +21,12 @@ import {
 } from "@/data/mockData";
 import { useSettings } from "@/contexts/SettingsContext";
 
-const Dashboard = () => {
-  const [activeTab, setActiveTab] = useState("dashboard");
+interface DashboardProps {
+  defaultTab?: string;
+}
+
+const Dashboard = ({ defaultTab = "dashboard" }: DashboardProps) => {
+  const [activeTab, setActiveTab] = useState(defaultTab);
   const [showNewProjectDialog, setShowNewProjectDialog] = useState(false);
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
   const [showPreviewDialog, setShowPreviewDialog] = useState(false);

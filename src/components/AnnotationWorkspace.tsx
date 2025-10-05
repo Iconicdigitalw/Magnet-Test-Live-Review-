@@ -127,6 +127,10 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
 }) => {
   const [currentUrl, setCurrentUrl] = useState<string>(url);
   const [inputUrl, setInputUrl] = useState<string>(url);
+  const [urlTabs, setUrlTabs] = useState<
+    Array<{ id: string; url: string; title: string }>
+  >([]);
+  const [showUrlDropdown, setShowUrlDropdown] = useState<boolean>(false);
   const [selectedDevice, setSelectedDevice] = useState<string>("desktop");
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -171,11 +175,100 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
   const scaledWidth = Math.round(currentDevice.width * zoomLevel);
   const scaledHeight = Math.round(currentDevice.height * zoomLevel);
 
-  const navigateToUrl = () => {
-    if (inputUrl) {
-      setIsLoading(true);
-      setCurrentUrl(inputUrl);
+  // Helper function to detect if input is a URL or search query
+  const processUserInput = (input: string): string => {
+    const trimmedInput = input.trim();
+
+    // If empty, return as is
+    if (!trimmedInput) return trimmedInput;
+
+    // Check if it already has a protocol
+    if (
+      trimmedInput.startsWith("http://") ||
+      trimmedInput.startsWith("https://")
+    ) {
+      return trimmedInput;
     }
+
+    // Check if it looks like a domain (contains a dot and no spaces)
+    const domainPattern =
+      /^[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9]*\.[a-zA-Z]{2,}([\/?].*)?$/;
+    const isLikelyDomain =
+      domainPattern.test(trimmedInput) && !trimmedInput.includes(" ");
+
+    // Check if it starts with www.
+    const startsWithWww = trimmedInput.startsWith("www.");
+
+    if (isLikelyDomain || startsWithWww) {
+      // It looks like a domain, add https://
+      return `https://${trimmedInput}`;
+    }
+
+    // Otherwise, treat it as a search query
+    return `https://www.google.com/search?q=${encodeURIComponent(trimmedInput)}&igu=1`;
+  };
+
+  const navigateToUrl = () => {
+    if (inputUrl && inputUrl !== currentUrl) {
+      // Process the input to determine if it's a URL or search query
+      const processedUrl = processUserInput(inputUrl);
+
+      // Add current URL to tabs if it's not already there and not empty
+      if (
+        currentUrl &&
+        currentUrl !== "https://example.com" &&
+        !urlTabs.find((tab) => tab.url === currentUrl)
+      ) {
+        const newTab = {
+          id: Date.now().toString(),
+          url: currentUrl,
+          title: getDomainFromUrl(currentUrl),
+        };
+        setUrlTabs((prev) => [...prev, newTab]);
+      }
+
+      setIsLoading(true);
+      setCurrentUrl(processedUrl);
+      setInputUrl(processedUrl); // Update the input to show the processed URL
+    }
+  };
+
+  const getDomainFromUrl = (url: string): string => {
+    try {
+      const urlObj = new URL(url);
+      return urlObj.hostname.replace("www.", "");
+    } catch {
+      return url.length > 30 ? url.substring(0, 30) + "..." : url;
+    }
+  };
+
+  const switchToTab = (tabUrl: string) => {
+    if (tabUrl !== currentUrl) {
+      // Add current URL to tabs if it's not already there
+      if (currentUrl && !urlTabs.find((tab) => tab.url === currentUrl)) {
+        const newTab = {
+          id: Date.now().toString(),
+          url: currentUrl,
+          title: getDomainFromUrl(currentUrl),
+        };
+        setUrlTabs((prev) => [...prev, newTab]);
+      }
+
+      setInputUrl(tabUrl);
+      setCurrentUrl(tabUrl);
+      setIsLoading(true);
+    }
+    setShowUrlDropdown(false);
+  };
+
+  const removeTab = (tabId: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+    setUrlTabs((prev) => prev.filter((tab) => tab.id !== tabId));
+  };
+
+  const clearAllTabs = () => {
+    setUrlTabs([]);
+    setShowUrlDropdown(false);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -894,8 +987,11 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
     try {
       if (iframeRef.current && iframeRef.current.contentWindow) {
         const iframeUrl = iframeRef.current.contentWindow.location.href;
-        setInputUrl(iframeUrl);
-        setCurrentUrl(iframeUrl);
+        // Only update if the URL actually changed (avoid infinite loops)
+        if (iframeUrl !== currentUrl && iframeUrl !== inputUrl) {
+          setInputUrl(iframeUrl);
+          setCurrentUrl(iframeUrl);
+        }
       }
     } catch (error) {
       // cross-origin
@@ -1253,27 +1349,98 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
           </TooltipProvider>
         </div>
 
-        {/* URL input */}
-        <div className="flex items-center flex-1 max-w-md mx-2">
-          <input
-            type="text"
-            value={inputUrl}
-            onChange={(e) => setInputUrl(e.target.value)}
-            onKeyPress={handleKeyPress}
-            className="w-full px-2 py-1 text-xs border rounded-l-md focus:outline-none focus:ring-1 focus:ring-primary"
-            placeholder="Enter website URL"
-          />
-          <Button
-            onClick={navigateToUrl}
-            size="sm"
-            className="rounded-l-none text-xs px-2"
-          >
-            Go
-          </Button>
+        {/* URL input with tabs dropdown */}
+        <div className="flex items-center flex-1 max-w-md mx-2 relative">
+          <div className="flex items-center w-full">
+            {/* Tabs dropdown button */}
+            {urlTabs.length > 0 && (
+              <DropdownMenu
+                open={showUrlDropdown}
+                onOpenChange={setShowUrlDropdown}
+              >
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="rounded-r-none text-xs px-2 h-[25.573024439282335px] border border-r-0 bg-background hover:bg-muted"
+                  >
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs font-medium">
+                        {urlTabs.length}
+                      </span>
+                      <ChevronRight className="h-3 w-3" />
+                    </div>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-80">
+                  <div className="flex items-center justify-between p-2 border-b">
+                    <span className="text-xs font-semibold text-muted-foreground">
+                      Saved URLs ({urlTabs.length})
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={clearAllTabs}
+                      className="h-6 px-2 text-xs text-muted-foreground hover:text-destructive"
+                    >
+                      Clear All
+                    </Button>
+                  </div>
+                  <div className="max-h-60 overflow-y-auto">
+                    {urlTabs.map((tab) => (
+                      <DropdownMenuItem
+                        key={tab.id}
+                        className="flex items-center justify-between p-2 cursor-pointer"
+                        onClick={() => switchToTab(tab.url)}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium truncate">
+                            {tab.title}
+                          </div>
+                          <div className="text-xs text-muted-foreground truncate">
+                            {tab.url}
+                          </div>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => removeTab(tab.id, e)}
+                          className="h-6 w-6 p-0 ml-2 hover:bg-destructive/10 hover:text-destructive"
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </DropdownMenuItem>
+                    ))}
+                  </div>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+
+            {/* URL input */}
+            <input
+              type="text"
+              value={inputUrl}
+              onChange={(e) => setInputUrl(e.target.value)}
+              onKeyPress={handleKeyPress}
+              className={`w-full px-2 py-1 text-xs border focus:outline-none focus:ring-1 focus:ring-primary ${
+                urlTabs.length > 0 ? "rounded-none" : "rounded-l-md"
+              }`}
+              placeholder="Enter website URL or search terms"
+            />
+
+            {/* Go button */}
+            <Button
+              onClick={navigateToUrl}
+              size="sm"
+              className="rounded-l-none text-xs px-2 h-[25.573024439282335px] bg-[#d1d3d7] text-[#656464]"
+            >
+              Go
+            </Button>
+          </div>
         </div>
 
         {/* Zoom Controls */}
-        <div className="flex items-center gap-1">
+        <div className="flex items-center">
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -1282,6 +1449,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
                   size="sm"
                   onClick={handleZoomOut}
                   disabled={zoomLevel === zoomLevels[0]}
+                  className="h-8 w-8 p-0"
                 >
                   <ZoomOut className="h-4 w-4" />
                 </Button>
@@ -1290,7 +1458,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
             </Tooltip>
           </TooltipProvider>
 
-          <span className="text-xs font-medium min-w-[3rem] text-center">
+          <span className="text-xs font-medium text-center">
             {Math.round(zoomLevel * 100)}%
           </span>
 
@@ -1302,6 +1470,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
                   size="sm"
                   onClick={handleZoomIn}
                   disabled={zoomLevel === zoomLevels[zoomLevels.length - 1]}
+                  className="h-8 w-8 p-0"
                 >
                   <ZoomIn className="h-4 w-4" />
                 </Button>
@@ -1310,7 +1479,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
             </Tooltip>
           </TooltipProvider>
 
-          <div className="w-px h-6 bg-border mx-1" />
+          <div className="w-px h-6 bg-border ml-1" />
         </div>
 
         {/* Annotation Tools */}

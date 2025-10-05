@@ -13,6 +13,7 @@ import HomePage from "./components/HomePage";
 import Dashboard from "./components/Dashboard";
 import AdminSettings from "./components/admin/AdminSettings";
 import UserManagement from "./components/admin/UserManagement";
+import MagnetReports from "./components/reports/MagnetReports";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import Login from "./components/auth/Login";
 
@@ -30,6 +31,22 @@ function App() {
               element={
                 <ProtectedRoute>
                   <Dashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/projects"
+              element={
+                <ProtectedRoute>
+                  <Dashboard defaultTab="projects" />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/reports"
+              element={
+                <ProtectedRoute>
+                  <MagnetReports />
                 </ProtectedRoute>
               }
             />

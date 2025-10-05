@@ -5,8 +5,9 @@ import "./index.css";
 import { BrowserRouter, HashRouter } from "react-router-dom";
 
 /* import { TempoDevtools } from 'tempo-devtools'; [deprecated] */
-/* TempoDevtools.init() [deprecated] */ const basename = import.meta.env
-  .BASE_URL;
+/* TempoDevtools.init() [deprecated] */
+
+const basename = import.meta.env.BASE_URL;
 const Router =
   import.meta.env.MODE === "development" ? BrowserRouter : HashRouter;
 
