@@ -14,6 +14,7 @@ import Dashboard from "./components/Dashboard";
 import AdminSettings from "./components/admin/AdminSettings";
 import UserManagement from "./components/admin/UserManagement";
 import MagnetReports from "./components/reports/MagnetReports";
+import ProjectReport from "./components/reports/ProjectReport";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import Login from "./components/auth/Login";
 
@@ -65,6 +66,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <UserManagement />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/project/:projectId/report"
+              element={
+                <ProtectedRoute>
+                  <ProjectReport />
                 </ProtectedRoute>
               }
             />

@@ -397,7 +397,7 @@ const Home = () => {
                           }
                           onDownload={projectActions.handleDownloadProject}
                           onDelete={handleDeleteProject}
-                          onVisitWebsite={projectActions.handleVisitWebsite}
+                          onViewReport={projectActions.handleViewReport}
                         />
                       ))}
                   </div>
@@ -427,7 +427,7 @@ const Home = () => {
                           }
                           onDownload={projectActions.handleDownloadProject}
                           onDelete={handleDeleteProject}
-                          onVisitWebsite={projectActions.handleVisitWebsite}
+                          onViewReport={projectActions.handleViewReport}
                         />
                       ))}
                   </div>
@@ -457,7 +457,7 @@ const Home = () => {
                           }
                           onDownload={projectActions.handleDownloadProject}
                           onDelete={handleDeleteProject}
-                          onVisitWebsite={projectActions.handleVisitWebsite}
+                          onViewReport={projectActions.handleViewReport}
                         />
                       ))}
                   </div>

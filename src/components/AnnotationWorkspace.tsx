@@ -186,6 +186,11 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
     externalTabs: false,
     entireDesktop: false,
   });
+  const [audioLevel, setAudioLevel] = useState<number>(0);
+  const [isMicMuted, setIsMicMuted] = useState<boolean>(false);
+  const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
+  const [analyserNode, setAnalyserNode] = useState<AnalyserNode | null>(null);
+  const audioMonitoringRef = useRef<number | null>(null);
 
   // Recording control tray state
   const [showRecordingTray, setShowRecordingTray] = useState<boolean>(false);
@@ -1048,10 +1053,16 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
 
       if (!stream) return;
 
+      // Log display stream tracks
+      console.log("Display stream tracks:", {
+        video: stream.getVideoTracks().length,
+        audio: stream.getAudioTracks().length,
+      });
+
       // Wait a moment for consent dialogs to fully close
       await new Promise((resolve) => setTimeout(resolve, 500));
 
-      // Start countdown timer
+      // Start countdown timer with display stream
       startCountdownTimer(stream);
     } catch (error) {
       console.error("Error starting recording:", error);
@@ -1090,65 +1101,266 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
     }, 1000);
   };
 
+  // Helper function to create mixed audio stream with proper audio handling
+  const createMixedAudioStream = async (
+    displayStream: MediaStream,
+    micStream: MediaStream,
+  ): Promise<{
+    mixedStream: MediaStream;
+    audioCtx: AudioContext;
+    analyser: AnalyserNode;
+  }> => {
+    // Create audio context
+    const audioCtx = new AudioContext();
+
+    // Create destination for mixed audio
+    const destination = audioCtx.createMediaStreamDestination();
+
+    // Handle display audio (if available)
+    const displayAudioTracks = displayStream.getAudioTracks();
+    if (displayAudioTracks.length > 0) {
+      const displaySource = audioCtx.createMediaStreamSource(
+        new MediaStream(displayAudioTracks),
+      );
+      displaySource.connect(destination);
+      console.log("Display audio connected");
+    }
+
+    // Handle microphone audio
+    const micAudioTracks = micStream.getAudioTracks();
+    if (micAudioTracks.length > 0) {
+      const micSource = audioCtx.createMediaStreamSource(
+        new MediaStream(micAudioTracks),
+      );
+
+      // Create analyser for audio level monitoring
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.8;
+
+      // Connect mic to both analyser and destination
+      micSource.connect(analyser);
+      micSource.connect(destination);
+
+      console.log("Microphone audio connected with analyser");
+
+      // Create mixed stream with video and mixed audio
+      const videoTracks = displayStream.getVideoTracks();
+      const mixedStream = new MediaStream([
+        ...videoTracks,
+        ...destination.stream.getAudioTracks(),
+      ]);
+
+      return { mixedStream, audioCtx, analyser };
+    }
+
+    // Fallback if no mic audio
+    const videoTracks = displayStream.getVideoTracks();
+    const mixedStream = new MediaStream([
+      ...videoTracks,
+      ...destination.stream.getAudioTracks(),
+    ]);
+
+    const analyser = audioCtx.createAnalyser();
+    return { mixedStream, audioCtx, analyser };
+  };
+
+  // Audio level monitoring function
+  const startAudioLevelMonitoring = (analyser: AnalyserNode) => {
+    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+    const monitor = () => {
+      if (!analyser) return;
+
+      analyser.getByteFrequencyData(dataArray);
+
+      // Calculate average audio level
+      const average =
+        dataArray.reduce((sum, value) => sum + value, 0) / dataArray.length;
+      const normalizedLevel = Math.min(100, (average / 255) * 100);
+
+      setAudioLevel(normalizedLevel);
+
+      audioMonitoringRef.current = requestAnimationFrame(monitor);
+    };
+
+    monitor();
+  };
+
+  // Stop audio level monitoring
+  const stopAudioLevelMonitoring = () => {
+    if (audioMonitoringRef.current) {
+      cancelAnimationFrame(audioMonitoringRef.current);
+      audioMonitoringRef.current = null;
+    }
+    setAudioLevel(0);
+  };
+
   // Helper function to start recording with a given stream
-  const startRecordingWithStream = (stream: MediaStream) => {
-    const recorder = new MediaRecorder(stream, {
-      mimeType: MediaRecorder.isTypeSupported("video/webm; codecs=vp9")
-        ? "video/webm; codecs=vp9"
-        : "video/webm",
-    });
-
-    const chunks: BlobPart[] = [];
-    recorder.ondataavailable = (event) => {
-      if (event.data.size > 0) chunks.push(event.data);
-    };
-    stream.getVideoTracks()[0].onended = () => {
-      if (recorder && recorder.state !== "inactive") {
-        recorder.stop();
-        setIsRecording(false);
-        setMediaRecorder(null);
-        setShowRecordingTray(false);
-        setRecordingStartTime(null);
-        setRecordingDuration(0);
+  const startRecordingWithStream = async (displayStream: MediaStream) => {
+    try {
+      // Get microphone stream
+      let micStream: MediaStream;
+      try {
+        micStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            sampleRate: 48000,
+          },
+        });
+        console.log("Microphone stream acquired");
+      } catch (micErr) {
+        console.warn("Microphone access denied:", micErr);
+        toast({
+          title: "Microphone unavailable",
+          description: "Recording will continue without audio narration.",
+          duration: 3000,
+        });
+        // Continue without mic
+        micStream = new MediaStream();
       }
-    };
-    recorder.onstop = () => {
-      const blob = new Blob(chunks, { type: "video/webm" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-      link.href = url;
-      link.download = `magnet-review-${timestamp}.webm`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-      stream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
 
-      // Hide recording tray
-      setShowRecordingTray(false);
-      setRecordingStartTime(null);
-      setRecordingDuration(0);
+      // Create mixed audio stream
+      const { mixedStream, audioCtx, analyser } = await createMixedAudioStream(
+        displayStream,
+        micStream,
+      );
+
+      // Store audio context and analyser for cleanup
+      setAudioContext(audioCtx);
+      setAnalyserNode(analyser);
+
+      // Start audio level monitoring
+      if (analyser && micStream.getAudioTracks().length > 0) {
+        startAudioLevelMonitoring(analyser);
+      }
+
+      // Log available tracks
+      console.log("Mixed stream tracks:", {
+        video: mixedStream.getVideoTracks().length,
+        audio: mixedStream.getAudioTracks().length,
+      });
+
+      // Choose codec that supports both video and audio
+      const preferredTypes = [
+        "video/webm;codecs=vp9,opus",
+        "video/webm;codecs=vp8,opus",
+        "video/webm;codecs=h264,opus",
+        "video/webm",
+      ];
+
+      const supportedType =
+        preferredTypes.find((t) => MediaRecorder.isTypeSupported(t)) ||
+        "video/webm";
+
+      console.log("Using MediaRecorder type:", supportedType);
+
+      const recorder = new MediaRecorder(mixedStream, {
+        mimeType: supportedType,
+        audioBitsPerSecond: 128000,
+        videoBitsPerSecond: 2500000,
+      });
+
+      const chunks: BlobPart[] = [];
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          console.log("Recording chunk received:", event.data.size, "bytes");
+          chunks.push(event.data);
+        }
+      };
+
+      mixedStream.getVideoTracks()[0].onended = () => {
+        if (recorder && recorder.state !== "inactive") {
+          recorder.stop();
+          cleanupRecording();
+        }
+      };
+
+      recorder.onstop = () => {
+        console.log("Recording stopped, total chunks:", chunks.length);
+        const blob = new Blob(chunks, { type: supportedType });
+        console.log("Final recording blob size:", blob.size, "bytes");
+
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+        link.href = url;
+        link.download = `magnet-review-${timestamp}.webm`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+
+        // Stop all tracks
+        mixedStream.getTracks().forEach((track: MediaStreamTrack) => {
+          console.log("Stopping track:", track.kind, track.label);
+          track.stop();
+        });
+
+        displayStream.getTracks().forEach((track: MediaStreamTrack) => {
+          track.stop();
+        });
+
+        micStream.getTracks().forEach((track: MediaStreamTrack) => {
+          track.stop();
+        });
+
+        // Cleanup audio context
+        if (audioCtx && audioCtx.state !== "closed") {
+          audioCtx.close();
+        }
+
+        cleanupRecording();
+
+        toast({
+          title: "Recording saved",
+          description: `Your MAGNET review recording has been saved successfully.`,
+          duration: 3000,
+        });
+      };
+
+      recorder.start(1000); // Capture data every second
+      setMediaRecorder(recorder);
+      setIsRecording(true);
+      setIsRecordingPaused(false);
+      setRecordingStartTime(new Date());
+      setShowRecordingTray(true);
 
       toast({
-        title: "Recording saved",
-        description: `Your MAGNET review recording has been saved successfully.`,
+        title: "Recording started",
+        description: getRecordingDescription(),
+        duration: 4000,
+      });
+    } catch (error) {
+      console.error("Error in startRecordingWithStream:", error);
+      toast({
+        title: "Recording failed",
+        description: "There was an error starting the recording.",
+        variant: "destructive",
         duration: 3000,
       });
-    };
+    }
+  };
 
-    recorder.start(1000);
-    setMediaRecorder(recorder);
-    setIsRecording(true);
+  // Cleanup function for recording
+  const cleanupRecording = () => {
+    stopAudioLevelMonitoring();
+
+    if (audioContext && audioContext.state !== "closed") {
+      audioContext.close();
+    }
+
+    setAudioContext(null);
+    setAnalyserNode(null);
+    setIsRecording(false);
     setIsRecordingPaused(false);
-    setRecordingStartTime(new Date());
-    setShowRecordingTray(true);
-
-    toast({
-      title: "Recording started",
-      description: getRecordingDescription(),
-      duration: 4000,
-    });
+    setMediaRecorder(null);
+    setShowRecordingTray(false);
+    setRecordingStartTime(null);
+    setRecordingDuration(0);
+    setIsMicMuted(false);
   };
 
   // Pause recording
@@ -1188,15 +1400,33 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
       (mediaRecorder.state === "recording" || mediaRecorder.state === "paused")
     ) {
       mediaRecorder.stop();
-      setIsRecording(false);
-      setIsRecordingPaused(false);
-      setMediaRecorder(null);
-      setShowRecordingTray(false);
-      setRecordingStartTime(null);
-      setRecordingDuration(0);
       toast({
         title: "Recording stopped",
         description: "Processing your recording...",
+        duration: 2000,
+      });
+    }
+  };
+
+  // Toggle microphone mute
+  const toggleMicMute = () => {
+    if (!mediaRecorder) return;
+
+    const stream = mediaRecorder.stream;
+    const audioTracks = stream.getAudioTracks();
+
+    if (audioTracks.length > 0) {
+      const newMutedState = !isMicMuted;
+      audioTracks.forEach((track) => {
+        track.enabled = !newMutedState;
+      });
+      setIsMicMuted(newMutedState);
+
+      toast({
+        title: newMutedState ? "Microphone muted" : "Microphone unmuted",
+        description: newMutedState
+          ? "Audio recording is paused"
+          : "Audio recording is active",
         duration: 2000,
       });
     }
@@ -2072,54 +2302,156 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
         </div>
       </div>
 
-      {/* Compact Recording Control Strip */}
+      {/* Enhanced Recording Control Strip */}
       {showRecordingTray && (
-        <div className="absolute top-12 right-4 z-50 animate-in slide-in-from-top-2 duration-300">
-          <div className="bg-background/95 backdrop-blur-sm border border-border rounded-lg shadow-lg px-2 py-1 flex items-center gap-2">
+        <div className="fixed top-12 right-4 z-[100] animate-in slide-in-from-top-2 duration-300 pointer-events-auto">
+          <div className="bg-background/95 backdrop-blur-sm border border-border rounded-lg shadow-lg px-1.5 py-1 flex items-center gap-1.5">
             {/* Recording Status */}
             <div className="flex items-center gap-1">
               <div
-                className={`w-1.5 h-1.5 rounded-full ${
+                className={`w-2 h-2 rounded-full ${
                   isRecordingPaused
                     ? "bg-yellow-500"
                     : "bg-red-500 animate-pulse"
                 }`}
               ></div>
-              <span className="text-xs font-mono font-medium text-red-500">
+              <span className="text-sm font-mono font-medium text-red-500">
                 {formatDuration(recordingDuration)}
               </span>
             </div>
 
+            {/* Microphone Control */}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={toggleMicMute}
+                    className={`h-6 w-6 p-0 ${
+                      isMicMuted
+                        ? "hover:bg-red-100 hover:text-red-600"
+                        : audioLevel > 5
+                          ? "hover:bg-green-100 hover:text-green-600"
+                          : "hover:bg-gray-100"
+                    }`}
+                  >
+                    {isMicMuted ? (
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                        className="w-4 h-4 text-red-500"
+                      >
+                        <path d="M3.53 2.47a.75.75 0 00-1.06 1.06l18 18a.75.75 0 101.06-1.06l-18-18zM12 3a3 3 0 00-3 3v6a3 3 0 003 3h.5l-1.5-1.5H12a1.5 1.5 0 01-1.5-1.5V6A1.5 1.5 0 0112 4.5h.5L11 3h1zm6 9v-.5l-1.5-1.5V12a4.5 4.5 0 01-4.5 4.5h-.5l-1.5-1.5H12a3 3 0 003-3v-1.5l1.5 1.5V12a4.5 4.5 0 01-9 0v-.5l-1.5-1.5V12a6 6 0 0012 0z" />
+                      </svg>
+                    ) : (
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                        className={`w-4 h-4 ${
+                          audioLevel > 5 ? "text-green-500" : "text-gray-400"
+                        }`}
+                      >
+                        <path d="M8.25 4.5a3.75 3.75 0 117.5 0v8.25a3.75 3.75 0 11-7.5 0V4.5z" />
+                        <path d="M6 10.5a.75.75 0 01.75.75v1.5a5.25 5.25 0 1010.5 0v-1.5a.75.75 0 011.5 0v1.5a6.751 6.751 0 01-6 6.709v2.291h3a.75.75 0 010 1.5h-7.5a.75.75 0 010-1.5h3v-2.291a6.751 6.751 0 01-6-6.709v-1.5A.75.75 0 016 10.5z" />
+                      </svg>
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {isMicMuted ? "Unmute microphone" : "Mute microphone"}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+
+            <div className="w-px h-4 bg-border" />
+
             {/* Controls */}
             <div className="flex items-center gap-0.5">
               {isRecordingPaused ? (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={resumeRecording}
-                  className="h-5 w-5 p-0 hover:bg-green-100 hover:text-green-600"
-                >
-                  <Play className="h-2.5 w-2.5" />
-                </Button>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={resumeRecording}
+                        className="h-6 w-6 p-0 hover:bg-green-100 hover:text-green-600"
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 24 24"
+                          fill="currentColor"
+                          className="w-4 h-4"
+                        >
+                          <path
+                            fillRule="evenodd"
+                            d="M4.5 5.653c0-1.426 1.529-2.33 2.779-1.643l11.54 6.348c1.295.712 1.295 2.573 0 3.285L7.28 19.991c-1.25.687-2.779-.217-2.779-1.643V5.653z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Resume recording</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               ) : (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={pauseRecording}
-                  className="h-5 w-5 p-0 hover:bg-yellow-100 hover:text-yellow-600"
-                >
-                  <Pause className="h-2.5 w-2.5" />
-                </Button>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={pauseRecording}
+                        className="h-6 w-6 p-0 hover:bg-yellow-100 hover:text-yellow-600"
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 24 24"
+                          fill="currentColor"
+                          className="w-4 h-4"
+                        >
+                          <path
+                            fillRule="evenodd"
+                            d="M6.75 5.25a.75.75 0 01.75-.75H9a.75.75 0 01.75.75v13.5a.75.75 0 01-.75.75H7.5a.75.75 0 01-.75-.75V5.25zm7.5 0A.75.75 0 0115 4.5h1.5a.75.75 0 01.75.75v13.5a.75.75 0 01-.75.75H15a.75.75 0 01-.75-.75V5.25z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Pause recording</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               )}
 
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowRecordingControlDialog(true)}
-                className="h-5 w-5 p-0 hover:bg-red-100 hover:text-red-600"
-              >
-                <StopCircle className="h-2.5 w-2.5" />
-              </Button>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowRecordingControlDialog(true)}
+                      className="h-6 w-6 p-0 hover:bg-red-100 hover:text-red-600"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                        className="w-4 h-4"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12zm6-2.438c0-.724.588-1.312 1.313-1.312h4.874c.725 0 1.313.588 1.313 1.313v4.874c0 .725-.588 1.313-1.313 1.313H9.564a1.312 1.312 0 01-1.313-1.313V9.564z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Stop recording</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
           </div>
         </div>

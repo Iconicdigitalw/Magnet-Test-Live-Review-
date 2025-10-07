@@ -142,8 +142,8 @@ export const useProjectActions = () => {
     }
   };
 
-  const handleVisitWebsite = (project: Project) => {
-    window.open(project.url, "_blank");
+  const handleViewReport = (project: Project) => {
+    window.location.href = `/project/${project.id}/report`;
   };
 
   const handleCreateProject = (
@@ -204,7 +204,7 @@ export const useProjectActions = () => {
     handleShareProject,
     handleDownloadProject,
     handleDeleteProject,
-    handleVisitWebsite,
+    handleViewReport,
     handleCreateProject,
   };
 };

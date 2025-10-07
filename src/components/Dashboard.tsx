@@ -261,7 +261,7 @@ const Dashboard = ({ defaultTab = "dashboard" }: DashboardProps) => {
                         }
                         onDownload={projectActions.handleDownloadProject}
                         onDelete={handleDeleteProject}
-                        onVisitWebsite={projectActions.handleVisitWebsite}
+                        onViewReport={projectActions.handleViewReport}
                       />
                     ))}
                   </div>

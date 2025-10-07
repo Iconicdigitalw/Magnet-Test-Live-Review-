@@ -21,7 +21,7 @@ import {
   Share2,
   Download,
   Trash2,
-  ExternalLink,
+  FileText,
   Calendar,
   User,
   Globe,
@@ -44,7 +44,7 @@ interface ProjectCardProps {
   onShare: (project: Project) => void;
   onDownload: (project: Project) => void;
   onDelete: (project: Project) => void;
-  onVisitWebsite: (project: Project) => void;
+  onViewReport: (project: Project) => void;
 }
 
 const ProjectCard: React.FC<ProjectCardProps> = ({
@@ -54,7 +54,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
   onShare,
   onDownload,
   onDelete,
-  onVisitWebsite,
+  onViewReport,
 }) => {
   const getButtonText = () => {
     if (project.status === "active") return "Continue Review";
@@ -213,13 +213,13 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
                   variant="ghost"
                   size="icon"
                   className="h-9 w-9 rounded-full hover:bg-gray-50 hover:text-gray-700 transition-colors"
-                  onClick={() => onVisitWebsite(project)}
+                  onClick={() => onViewReport(project)}
                 >
-                  <ExternalLink className="h-4 w-4" />
+                  <FileText className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <p>Visit website</p>
+                <p>View report</p>
               </TooltipContent>
             </Tooltip>
           </div>
