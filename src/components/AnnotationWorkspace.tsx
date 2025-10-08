@@ -41,6 +41,9 @@ import {
   Save,
   Settings,
   Timer,
+  Upload,
+  AlertCircle,
+  RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -203,6 +206,14 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
   const [showRecordingControlDialog, setShowRecordingControlDialog] =
     useState<boolean>(false);
 
+  // Screenshot loading state
+  const [iframeLoadError, setIframeLoadError] = useState<boolean>(false);
+  const [showScreenshotOptions, setShowScreenshotOptions] =
+    useState<boolean>(false);
+  const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const loadTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const notesRef = useRef<HTMLTextAreaElement>(null);
@@ -266,9 +277,27 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
         setUrlTabs((prev) => [...prev, newTab]);
       }
 
+      // Clear any existing timeout
+      if (loadTimeoutRef.current) {
+        clearTimeout(loadTimeoutRef.current);
+      }
+
+      // Reset error states
+      setIframeLoadError(false);
+      setShowScreenshotOptions(false);
+      setScreenshotUrl(null);
       setIsLoading(true);
       setCurrentUrl(processedUrl);
       setInputUrl(processedUrl); // Update the input to show the processed URL
+
+      // Set a timeout to detect if the iframe fails to load
+      loadTimeoutRef.current = setTimeout(() => {
+        // Check if still loading after timeout
+        if (isLoading) {
+          console.log("Iframe load timeout - website may be refusing to load");
+          handleIframeError();
+        }
+      }, 15000); // Increased to 15 seconds to give more time for legitimate sites
     }
   };
 
@@ -293,9 +322,26 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
         setUrlTabs((prev) => [...prev, newTab]);
       }
 
+      // Clear any existing timeout
+      if (loadTimeoutRef.current) {
+        clearTimeout(loadTimeoutRef.current);
+      }
+
+      // Reset error states
+      setIframeLoadError(false);
+      setShowScreenshotOptions(false);
+      setScreenshotUrl(null);
       setInputUrl(tabUrl);
       setCurrentUrl(tabUrl);
       setIsLoading(true);
+
+      // Set a timeout to detect if the iframe fails to load
+      loadTimeoutRef.current = setTimeout(() => {
+        if (isLoading) {
+          console.log("Iframe load timeout - website may be refusing to load");
+          handleIframeError();
+        }
+      }, 15000); // Increased to 15 seconds
     }
     setShowUrlDropdown(false);
   };
@@ -339,12 +385,32 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
   };
 
   const handleRefresh = () => {
+    // Clear any existing timeout
+    if (loadTimeoutRef.current) {
+      clearTimeout(loadTimeoutRef.current);
+    }
+
+    // Reset error states
+    setIframeLoadError(false);
+    setShowScreenshotOptions(false);
+    setScreenshotUrl(null);
     setIsLoading(true);
+
     if (iframeRef.current) {
       iframeRef.current.src = "about:blank";
       setTimeout(() => {
         if (iframeRef.current) {
           iframeRef.current.src = currentUrl;
+
+          // Set a timeout to detect if the iframe fails to load
+          loadTimeoutRef.current = setTimeout(() => {
+            if (isLoading) {
+              console.log(
+                "Iframe load timeout - website may be refusing to load",
+              );
+              handleIframeError();
+            }
+          }, 15000); // Increased to 15 seconds
         }
       }, 100);
     }
@@ -1458,7 +1524,16 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
 
   // Iframe load
   const handleIframeLoad = () => {
+    // Clear the timeout since the iframe loaded successfully
+    if (loadTimeoutRef.current) {
+      clearTimeout(loadTimeoutRef.current);
+      loadTimeoutRef.current = null;
+    }
+
     setIsLoading(false);
+    setIframeLoadError(false);
+    setShowScreenshotOptions(false);
+    
     try {
       if (iframeRef.current && iframeRef.current.contentWindow) {
         const iframeUrl = iframeRef.current.contentWindow.location.href;
@@ -1469,7 +1544,9 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
         }
       }
     } catch (error) {
-      // cross-origin
+      // Cross-origin is normal for most websites
+      // The iframe loaded successfully, just can't access its content
+      console.log('Cross-origin iframe loaded successfully');
     }
 
     try {
@@ -1490,6 +1567,67 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
       // cross-origin
     }
   };
+
+  // Handle iframe error
+  const handleIframeError = () => {
+    setIsLoading(false);
+    setIframeLoadError(true);
+    setShowScreenshotOptions(true);
+    toast({
+      title: "Website failed to load",
+      description:
+        "This website cannot be loaded in the iframe. You can upload a screenshot to continue your review.",
+      variant: "destructive",
+      duration: 5000,
+    });
+  };
+
+  // Handle screenshot upload
+  const handleLoadScreenshot = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    const validTypes = ["image/png", "image/jpeg", "image/jpg", "image/webp"];
+    if (!validTypes.includes(file.type)) {
+      toast({
+        title: "Invalid file type",
+        description: "Please upload a PNG, JPG, JPEG, or WebP image.",
+        variant: "destructive",
+        duration: 3000,
+      });
+      return;
+    }
+
+    // Create object URL for the image
+    const imageUrl = URL.createObjectURL(file);
+    setScreenshotUrl(imageUrl);
+    setShowScreenshotOptions(false);
+    setIframeLoadError(false);
+
+    toast({
+      title: "Screenshot loaded",
+      description: "You can now annotate and review the screenshot.",
+      duration: 3000,
+    });
+  };
+
+  // Handle retry URL
+  const handleRetryUrl = () => {
+    setScreenshotUrl(null);
+    setShowScreenshotOptions(false);
+    setIframeLoadError(false);
+    handleRefresh();
+  };
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (loadTimeoutRef.current) {
+        clearTimeout(loadTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Iframe scroll events
   useEffect(() => {
@@ -2263,6 +2401,25 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
+
+          {/* Test Screenshot Button - for debugging */}
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setShowScreenshotOptions(true);
+                    setIframeLoadError(true);
+                  }}
+                >
+                  <Upload className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Test Screenshot Upload</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
 
         {/* Right side - Device selector and fullscreen */}
@@ -2520,26 +2677,109 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
               </div>
             )}
 
-            {/* Website iframe */}
-            <iframe
-              ref={iframeRef}
-              key={`iframe-${currentUrl}`}
-              src={currentUrl}
-              onLoad={handleIframeLoad}
-              className="w-full h-full border-0 border-transparent border-none"
-              style={{
-                width: isFullscreen ? "100vw" : `${currentDevice.width}px`,
-                height: isFullscreen ? "100vh" : `${currentDevice.height}px`,
-                transform: isFullscreen ? "none" : `scale(${zoomLevel})`,
-                transformOrigin: "top left",
-              }}
-              sandbox="allow-same-origin allow-scripts allow-forms allow-top-navigation allow-popups allow-modals allow-downloads"
-              allow="fullscreen; camera; microphone; geolocation; payment; autoplay; clipboard-read; clipboard-write"
-              referrerPolicy="no-referrer-when-downgrade"
-              onError={(e) => {
-                console.error("Iframe error:", e);
-                setIsLoading(false);
-              }}
+            {/* Website iframe or screenshot */}
+            {screenshotUrl ? (
+              <div
+                className="w-full h-full overflow-auto bg-gray-50"
+                style={{
+                  width: isFullscreen ? "100vw" : `${currentDevice.width}px`,
+                  height: isFullscreen ? "100vh" : `${currentDevice.height}px`,
+                  transform: isFullscreen ? "none" : `scale(${zoomLevel})`,
+                  transformOrigin: "top left",
+                }}
+              >
+                <img
+                  src={screenshotUrl}
+                  alt="Website screenshot"
+                  className="w-full h-auto"
+                  style={{
+                    maxWidth: "100%",
+                    display: "block",
+                  }}
+                />
+              </div>
+            ) : (
+              <iframe
+                ref={iframeRef}
+                key={`iframe-${currentUrl}`}
+                src={currentUrl}
+                onLoad={handleIframeLoad}
+                className="w-full h-full border-0 border-transparent border-none"
+                style={{
+                  width: isFullscreen ? "100vw" : `${currentDevice.width}px`,
+                  height: isFullscreen ? "100vh" : `${currentDevice.height}px`,
+                  transform: isFullscreen ? "none" : `scale(${zoomLevel})`,
+                  transformOrigin: "top left",
+                }}
+                sandbox="allow-same-origin allow-scripts allow-forms allow-top-navigation allow-popups allow-modals allow-downloads"
+                allow="fullscreen; camera; microphone; geolocation; payment; autoplay; clipboard-read; clipboard-write"
+                referrerPolicy="no-referrer-when-downgrade"
+                onError={handleIframeError}
+              />
+            )}
+
+            {/* Screenshot Options Overlay */}
+            {showScreenshotOptions && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/60 z-30">
+                <div className="bg-background rounded-lg p-6 shadow-2xl max-w-md w-full mx-4">
+                  <div className="text-center space-y-4">
+                    <AlertCircle className="h-12 w-12 mx-auto text-destructive" />
+                    <div>
+                      <h3 className="font-semibold text-lg mb-2">
+                        Website Cannot Load
+                      </h3>
+                      <p className="text-sm text-muted-foreground mb-4">
+                        This website refuses to load in an iframe due to
+                        security restrictions. You can upload a screenshot to
+                        continue your review.
+                      </p>
+                    </div>
+
+                    <div className="space-y-3">
+                      <Button
+                        onClick={() => fileInputRef.current?.click()}
+                        className="w-full flex items-center justify-center gap-2"
+                      >
+                        <Upload className="h-4 w-4" />
+                        Upload Screenshot
+                      </Button>
+
+                      <Button
+                        onClick={handleRetryUrl}
+                        variant="outline"
+                        className="w-full flex items-center justify-center gap-2"
+                      >
+                        <RotateCcw className="h-4 w-4" />
+                        Retry Loading URL
+                      </Button>
+
+                      <Button
+                        onClick={() => {
+                          setShowScreenshotOptions(false);
+                          setIframeLoadError(false);
+                        }}
+                        variant="ghost"
+                        className="w-full"
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+
+                    <p className="text-xs text-muted-foreground mt-4">
+                      Supported formats: PNG, JPG, JPEG, WebP
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/jpg,image/webp"
+              onChange={handleLoadScreenshot}
+              className="hidden"
             />
 
             {/* Annotation overlay */}
