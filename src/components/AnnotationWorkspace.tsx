@@ -144,8 +144,20 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
   const [currentUrl, setCurrentUrl] = useState<string>(url);
   const [inputUrl, setInputUrl] = useState<string>(url);
   const [urlTabs, setUrlTabs] = useState<
-    Array<{ id: string; url: string; title: string }>
+    Array<{
+      id: string;
+      url: string;
+      title: string;
+      isFile?: boolean;
+      fileUrl?: string;
+      fileName?: string;
+      fileType?: string;
+    }>
   >([]);
+  const [projectStateKey] = useState(
+    () => `magnet-project-state-${projectId}-${reviewId}`,
+  );
+  const [isStateLoaded, setIsStateLoaded] = useState(false);
   const [showUrlDropdown, setShowUrlDropdown] = useState<boolean>(false);
   const [selectedDevice, setSelectedDevice] = useState<string>("desktop");
   const [isFullscreen, setIsFullscreen] = useState<boolean>(true);
@@ -312,8 +324,15 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
 
   const switchToTab = (tabUrl: string) => {
     if (tabUrl !== currentUrl) {
-      // Add current URL to tabs if it's not already there
-      if (currentUrl && !urlTabs.find((tab) => tab.url === currentUrl)) {
+      // Find the tab being switched to
+      const targetTab = urlTabs.find((tab) => tab.url === tabUrl);
+
+      // Add current URL to tabs if it's not already there and not a file
+      if (
+        currentUrl &&
+        !currentUrl.startsWith("file://") &&
+        !urlTabs.find((tab) => tab.url === currentUrl)
+      ) {
         const newTab = {
           id: Date.now().toString(),
           url: currentUrl,
@@ -327,27 +346,68 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
         clearTimeout(loadTimeoutRef.current);
       }
 
-      // Reset error states
-      setIframeLoadError(false);
-      setShowScreenshotOptions(false);
-      setScreenshotUrl(null);
       setInputUrl(tabUrl);
       setCurrentUrl(tabUrl);
-      setIsLoading(true);
 
-      // Set a timeout to detect if the iframe fails to load
-      loadTimeoutRef.current = setTimeout(() => {
-        if (isLoading) {
-          console.log("Iframe load timeout - website may be refusing to load");
-          handleIframeError();
-        }
-      }, 15000); // Increased to 15 seconds
+      // Check if this is a file tab
+      if (targetTab?.isFile && targetTab.fileUrl) {
+        // Load the file
+        setScreenshotUrl(targetTab.fileUrl);
+        setIframeLoadError(false);
+        setShowScreenshotOptions(false);
+        setIsLoading(false);
+      } else {
+        // Reset error states for regular URLs
+        setIframeLoadError(false);
+        setShowScreenshotOptions(false);
+        setScreenshotUrl(null);
+        setIsLoading(true);
+
+        // Set a timeout to detect if the iframe fails to load
+        loadTimeoutRef.current = setTimeout(() => {
+          if (isLoading) {
+            console.log(
+              "Iframe load timeout - website may be refusing to load",
+            );
+            handleIframeError();
+          }
+        }, 15000); // Increased to 15 seconds
+      }
     }
     setShowUrlDropdown(false);
   };
 
   const removeTab = (tabId: string, event: React.MouseEvent) => {
     event.stopPropagation();
+
+    // Find the tab being removed
+    const tabToRemove = urlTabs.find((tab) => tab.id === tabId);
+
+    // Clean up file URL if it's a file tab
+    if (tabToRemove?.isFile && tabToRemove.fileUrl) {
+      URL.revokeObjectURL(tabToRemove.fileUrl);
+
+      // Remove from localStorage
+      try {
+        localStorage.removeItem(`${projectStateKey}-file-${tabToRemove.url}`);
+      } catch (error) {
+        console.warn("Could not remove file from localStorage:", error);
+      }
+
+      // If this was the current tab, clear the screenshot
+      if (tabToRemove.url === currentUrl) {
+        setScreenshotUrl(null);
+        // Switch to a different tab or default URL
+        const remainingTabs = urlTabs.filter((tab) => tab.id !== tabId);
+        if (remainingTabs.length > 0) {
+          switchToTab(remainingTabs[remainingTabs.length - 1].url);
+        } else {
+          setCurrentUrl("https://example.com");
+          setInputUrl("https://example.com");
+        }
+      }
+    }
+
     setUrlTabs((prev) => prev.filter((tab) => tab.id !== tabId));
   };
 
@@ -1533,7 +1593,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
     setIsLoading(false);
     setIframeLoadError(false);
     setShowScreenshotOptions(false);
-    
+
     try {
       if (iframeRef.current && iframeRef.current.contentWindow) {
         const iframeUrl = iframeRef.current.contentWindow.location.href;
@@ -1546,7 +1606,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
     } catch (error) {
       // Cross-origin is normal for most websites
       // The iframe loaded successfully, just can't access its content
-      console.log('Cross-origin iframe loaded successfully');
+      console.log("Cross-origin iframe loaded successfully");
     }
 
     try {
@@ -1582,52 +1642,368 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
     });
   };
 
-  // Handle screenshot upload
+  // Handle screenshot upload with enhanced quality preservation
   const handleLoadScreenshot = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     // Validate file type
-    const validTypes = ["image/png", "image/jpeg", "image/jpg", "image/webp"];
+    const validTypes = [
+      "image/png",
+      "image/jpeg",
+      "image/jpg",
+      "image/webp",
+      "image/bmp",
+      "image/tiff",
+      "application/pdf",
+    ];
     if (!validTypes.includes(file.type)) {
       toast({
         title: "Invalid file type",
-        description: "Please upload a PNG, JPG, JPEG, or WebP image.",
+        description:
+          "Please upload a PNG, JPG, JPEG, WebP, BMP, TIFF image, or PDF file.",
         variant: "destructive",
         duration: 3000,
       });
       return;
     }
 
-    // Create object URL for the image
-    const imageUrl = URL.createObjectURL(file);
-    setScreenshotUrl(imageUrl);
-    setShowScreenshotOptions(false);
-    setIframeLoadError(false);
+    // Validate file size (optional - warn for very large files)
+    const maxSize = 50 * 1024 * 1024; // 50MB
+    if (file.size > maxSize) {
+      toast({
+        title: "Large file warning",
+        description: "This is a large image file. Loading may take a moment.",
+        duration: 4000,
+      });
+    }
 
-    toast({
-      title: "Screenshot loaded",
-      description: "You can now annotate and review the screenshot.",
-      duration: 3000,
-    });
+    try {
+      // Create object URL for the image - this preserves original quality
+      // No compression, resizing, or processing is applied to maintain full quality
+      const imageUrl = URL.createObjectURL(file);
+
+      // Create a special URL identifier for the uploaded file
+      const fileTabUrl = `file://${file.name}`;
+      const fileTitle =
+        file.type === "application/pdf" ? `📄 ${file.name}` : `🖼️ ${file.name}`;
+
+      // Add current URL to tabs if it's not already there and not empty
+      if (
+        currentUrl &&
+        currentUrl !== "https://example.com" &&
+        !urlTabs.find((tab) => tab.url === currentUrl)
+      ) {
+        const currentTab = {
+          id: Date.now().toString(),
+          url: currentUrl,
+          title: getDomainFromUrl(currentUrl),
+        };
+        setUrlTabs((prev) => [...prev, currentTab]);
+      }
+
+      // Add the uploaded file as a new tab
+      const newFileTab = {
+        id: (Date.now() + 1).toString(),
+        url: fileTabUrl,
+        title: fileTitle,
+        isFile: true,
+        fileUrl: imageUrl,
+        fileName: file.name,
+        fileType: file.type,
+      };
+      setUrlTabs((prev) => [...prev, newFileTab]);
+
+      // Store the image data in localStorage for persistence
+      // Convert file to base64 for storage (only for smaller files to avoid storage limits)
+      if (file.size <= 5 * 1024 * 1024) {
+        // 5MB limit for localStorage
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          try {
+            const base64Data = e.target?.result as string;
+            const imageData = {
+              data: base64Data,
+              name: file.name,
+              type: file.type,
+              size: file.size,
+              lastModified: file.lastModified,
+              tabUrl: fileTabUrl,
+            };
+            localStorage.setItem(
+              `${projectStateKey}-file-${fileTabUrl}`,
+              JSON.stringify(imageData),
+            );
+          } catch (storageError) {
+            console.warn("Could not store file in localStorage:", storageError);
+          }
+        };
+        reader.readAsDataURL(file);
+      }
+
+      // Switch to the uploaded file
+      setCurrentUrl(fileTabUrl);
+      setInputUrl(fileTabUrl);
+      setScreenshotUrl(imageUrl);
+      setShowScreenshotOptions(false);
+      setIframeLoadError(false);
+
+      toast({
+        title:
+          file.type === "application/pdf"
+            ? "PDF loaded successfully"
+            : "Screenshot loaded successfully",
+        description: `${file.name} (${(file.size / 1024 / 1024).toFixed(1)}MB) loaded at original quality. You can now annotate and review the ${file.type === "application/pdf" ? "PDF" : "screenshot"}.`,
+        duration: 4000,
+      });
+    } catch (error) {
+      console.error("Error loading screenshot:", error);
+      toast({
+        title: "Failed to load screenshot",
+        description: "There was an error loading the image. Please try again.",
+        variant: "destructive",
+        duration: 3000,
+      });
+    }
   };
 
   // Handle retry URL
   const handleRetryUrl = () => {
-    setScreenshotUrl(null);
+    // Only clear screenshot if current URL is not a file
+    if (!currentUrl.startsWith("file://")) {
+      // Clear screenshot from localStorage when retrying URL
+      try {
+        localStorage.removeItem(`${projectStateKey}-screenshot`);
+      } catch (error) {
+        console.warn("Could not clear screenshot from localStorage:", error);
+      }
+
+      // Clean up existing screenshot URL
+      if (screenshotUrl) {
+        URL.revokeObjectURL(screenshotUrl);
+      }
+
+      setScreenshotUrl(null);
+    }
+
     setShowScreenshotOptions(false);
     setIframeLoadError(false);
     handleRefresh();
   };
 
-  // Cleanup timeout on unmount
+  // Load persisted files on component mount
+  useEffect(() => {
+    if (!isStateLoaded) return;
+
+    const loadPersistedFiles = async () => {
+      try {
+        // Load files for each file tab
+        const fileTabsToLoad = urlTabs.filter((tab) => tab.isFile && tab.url);
+
+        for (const tab of fileTabsToLoad) {
+          const savedFile = localStorage.getItem(
+            `${projectStateKey}-file-${tab.url}`,
+          );
+          if (savedFile) {
+            const fileData = JSON.parse(savedFile);
+
+            // Convert base64 back to blob and create object URL
+            const response = await fetch(fileData.data);
+            const blob = await response.blob();
+            const fileUrl = URL.createObjectURL(blob);
+
+            // Update the tab with the restored file URL
+            setUrlTabs((prev) =>
+              prev.map((t) => (t.id === tab.id ? { ...t, fileUrl } : t)),
+            );
+
+            // If this is the current tab, set it as the screenshot
+            if (tab.url === currentUrl) {
+              setScreenshotUrl(fileUrl);
+              setShowScreenshotOptions(false);
+              setIframeLoadError(false);
+            }
+
+            console.log("Persisted file restored:", fileData.name);
+          }
+        }
+
+        // Also check for legacy screenshot storage
+        const savedScreenshot = localStorage.getItem(
+          `${projectStateKey}-screenshot`,
+        );
+        if (savedScreenshot && !currentUrl.startsWith("file://")) {
+          const imageData = JSON.parse(savedScreenshot);
+
+          // Convert base64 back to blob and create object URL
+          const response = await fetch(imageData.data);
+          const blob = await response.blob();
+          const imageUrl = URL.createObjectURL(blob);
+
+          setScreenshotUrl(imageUrl);
+          setShowScreenshotOptions(false);
+          setIframeLoadError(false);
+
+          console.log("Legacy persisted screenshot restored:", imageData.name);
+        }
+      } catch (error) {
+        console.warn("Could not load persisted files:", error);
+      }
+    };
+
+    loadPersistedFiles();
+  }, [isStateLoaded, projectStateKey, urlTabs.length]);
+
+  // Load project state on mount
+  useEffect(() => {
+    const loadProjectState = () => {
+      try {
+        // Clear any existing screenshot URL from previous project
+        if (screenshotUrl) {
+          URL.revokeObjectURL(screenshotUrl);
+          setScreenshotUrl(null);
+        }
+        setShowScreenshotOptions(false);
+        setIframeLoadError(false);
+
+        const savedState = localStorage.getItem(projectStateKey);
+        if (savedState) {
+          const state = JSON.parse(savedState);
+
+          // Restore URL tabs
+          if (state.urlTabs && Array.isArray(state.urlTabs)) {
+            setUrlTabs(state.urlTabs);
+          }
+
+          // Restore current URL if different from initial
+          if (state.currentUrl && state.currentUrl !== url) {
+            setCurrentUrl(state.currentUrl);
+            setInputUrl(state.currentUrl);
+          }
+
+          // Don't restore screenshot URL from state - it will be loaded separately from localStorage
+          // This prevents stale URLs from persisting
+
+          // Restore device selection
+          if (state.selectedDevice) {
+            setSelectedDevice(state.selectedDevice);
+          }
+
+          // Restore zoom level
+          if (state.zoomLevel) {
+            setZoomLevel(state.zoomLevel);
+          }
+
+          // Restore fullscreen state
+          if (typeof state.isFullscreen === "boolean") {
+            setIsFullscreen(state.isFullscreen);
+          }
+
+          // Restore MAGNET panel state
+          if (typeof state.isMagnetPanelOpen === "boolean") {
+            setIsMagnetPanelOpen(state.isMagnetPanelOpen);
+          }
+
+          if (typeof state.isMagnetPanelMinimized === "boolean") {
+            setIsMagnetPanelMinimized(state.isMagnetPanelMinimized);
+          }
+
+          if (state.magnetActiveTab) {
+            setMagnetActiveTab(state.magnetActiveTab);
+          }
+
+          // Restore annotation tools state
+          if (typeof state.showAnnotationTools === "boolean") {
+            setShowAnnotationTools(state.showAnnotationTools);
+          }
+
+          if (state.annotationTool) {
+            setAnnotationTool(state.annotationTool);
+          }
+
+          if (state.annotationColor) {
+            setAnnotationColor(state.annotationColor);
+          }
+
+          // Restore notes state
+          if (typeof state.isNotesOpen === "boolean") {
+            setIsNotesOpen(state.isNotesOpen);
+          }
+
+          console.log("Project state restored successfully");
+        }
+      } catch (error) {
+        console.error("Error loading project state:", error);
+      } finally {
+        setIsStateLoaded(true);
+      }
+    };
+
+    loadProjectState();
+  }, [projectStateKey, url]);
+
+  // Save project state whenever relevant state changes
+  useEffect(() => {
+    if (!isStateLoaded) return; // Don't save until initial state is loaded
+
+    const saveProjectState = () => {
+      try {
+        const state = {
+          urlTabs,
+          currentUrl,
+          // Don't save screenshotUrl in state - it's managed separately in localStorage
+          selectedDevice,
+          zoomLevel,
+          isFullscreen,
+          isMagnetPanelOpen,
+          isMagnetPanelMinimized,
+          magnetActiveTab,
+          showAnnotationTools,
+          annotationTool,
+          annotationColor,
+          isNotesOpen,
+          lastSaved: new Date().toISOString(),
+        };
+
+        localStorage.setItem(projectStateKey, JSON.stringify(state));
+      } catch (error) {
+        console.error("Error saving project state:", error);
+      }
+    };
+
+    // Debounce the save operation
+    const timeoutId = setTimeout(saveProjectState, 500);
+
+    return () => clearTimeout(timeoutId);
+  }, [
+    isStateLoaded,
+    projectStateKey,
+    urlTabs,
+    currentUrl,
+    selectedDevice,
+    zoomLevel,
+    isFullscreen,
+    isMagnetPanelOpen,
+    isMagnetPanelMinimized,
+    magnetActiveTab,
+    showAnnotationTools,
+    annotationTool,
+    annotationColor,
+    isNotesOpen,
+  ]);
+
+  // Cleanup timeout and screenshot URL on unmount
   useEffect(() => {
     return () => {
       if (loadTimeoutRef.current) {
         clearTimeout(loadTimeoutRef.current);
       }
+      // Clean up screenshot URL when component unmounts
+      if (screenshotUrl) {
+        URL.revokeObjectURL(screenshotUrl);
+      }
     };
-  }, []);
+  }, [screenshotUrl]);
 
   // Iframe scroll events
   useEffect(() => {
@@ -2013,7 +2389,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
                             {tab.title}
                           </div>
                           <div className="text-xs text-muted-foreground truncate">
-                            {tab.url}
+                            {tab.isFile ? `File: ${tab.fileName}` : tab.url}
                           </div>
                         </div>
                         <Button
@@ -2677,7 +3053,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
               </div>
             )}
 
-            {/* Website iframe or screenshot */}
+            {/* Website iframe, screenshot, or PDF */}
             {screenshotUrl ? (
               <div
                 className="w-full h-full overflow-auto bg-gray-50"
@@ -2688,15 +3064,69 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
                   transformOrigin: "top left",
                 }}
               >
-                <img
-                  src={screenshotUrl}
-                  alt="Website screenshot"
-                  className="w-full h-auto"
-                  style={{
-                    maxWidth: "100%",
-                    display: "block",
-                  }}
-                />
+                {/* Check if the loaded file is a PDF */}
+                {screenshotUrl.includes("data:application/pdf") ||
+                screenshotUrl.includes(".pdf") ? (
+                  <iframe
+                    src={screenshotUrl}
+                    className="w-full h-full border-0"
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      minHeight: isFullscreen
+                        ? "100vh"
+                        : `${currentDevice.height}px`,
+                    }}
+                    title="PDF Viewer"
+                    onLoad={() => {
+                      console.log("PDF loaded successfully");
+                    }}
+                    onError={(e) => {
+                      console.error("PDF failed to load:", e);
+                      toast({
+                        title: "PDF load error",
+                        description:
+                          "The PDF could not be displayed. Please try uploading again or use a different PDF viewer.",
+                        variant: "destructive",
+                        duration: 3000,
+                      });
+                    }}
+                  />
+                ) : (
+                  <img
+                    src={screenshotUrl}
+                    alt="Website screenshot"
+                    className="w-full h-auto"
+                    style={{
+                      maxWidth: "100%",
+                      display: "block",
+                      imageRendering: "high-quality", // Use high-quality rendering
+                      objectFit: "contain", // Maintain aspect ratio without cropping
+                      objectPosition: "top left", // Align to top-left for consistency
+                      filter: "none", // Ensure no filters are applied
+                      transform: "none", // Ensure no transforms are applied
+                    }}
+                    loading="eager" // Load immediately for better quality perception
+                    decoding="sync" // Synchronous decoding for immediate display
+                    onLoad={(e) => {
+                      // Ensure the image maintains its natural dimensions
+                      const img = e.target as HTMLImageElement;
+                      console.log(
+                        `Screenshot loaded: ${img.naturalWidth}x${img.naturalHeight}px`,
+                      );
+                    }}
+                    onError={(e) => {
+                      console.error("Screenshot failed to load:", e);
+                      toast({
+                        title: "Screenshot load error",
+                        description:
+                          "The screenshot could not be displayed. Please try uploading again.",
+                        variant: "destructive",
+                        duration: 3000,
+                      });
+                    }}
+                  />
+                )}
               </div>
             ) : (
               <iframe
@@ -2766,7 +3196,10 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
                     </div>
 
                     <p className="text-xs text-muted-foreground mt-4">
-                      Supported formats: PNG, JPG, JPEG, WebP
+                      Supported formats: PNG, JPG, JPEG, WebP, BMP, TIFF, PDF
+                      <br />
+                      Files are preserved at original quality without
+                      compression
                     </p>
                   </div>
                 </div>
@@ -2777,7 +3210,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/png,image/jpeg,image/jpg,image/webp"
+              accept="image/png,image/jpeg,image/jpg,image/webp,image/bmp,image/tiff,application/pdf"
               onChange={handleLoadScreenshot}
               className="hidden"
             />
