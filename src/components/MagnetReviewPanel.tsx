@@ -47,6 +47,78 @@ type Question = SettingsQuestion;
 // TabData is compatible with MagnetCategory from SettingsContext
 type TabData = MagnetCategory;
 
+// Utility functions for project-specific note management
+export const getProjectNotes = (projectId: string, reviewId: string = 'default') => {
+  try {
+    const storageKey = `magnet-review-${projectId}-${reviewId}`;
+    const savedResponses = localStorage.getItem(storageKey);
+    return savedResponses ? JSON.parse(savedResponses) : {};
+  } catch (error) {
+    console.error('Error loading project notes:', error);
+    return {};
+  }
+};
+
+export const saveProjectNotes = (
+  projectId: string, 
+  reviewId: string = 'default', 
+  responses: Record<string, { answer: string; notes: string }>
+) => {
+  try {
+    const storageKey = `magnet-review-${projectId}-${reviewId}`;
+    localStorage.setItem(storageKey, JSON.stringify(responses));
+    
+    // Also update project index
+    const projectIndexKey = `magnet-project-reviews-${projectId}`;
+    const existingReviews = JSON.parse(localStorage.getItem(projectIndexKey) || "[]");
+    const reviewIndex = {
+      reviewId,
+      lastSaved: new Date().toISOString(),
+      storageKey,
+      responseCount: Object.keys(responses).length
+    };
+    
+    const updatedReviews = existingReviews.filter((r: any) => r.reviewId !== reviewId);
+    updatedReviews.push(reviewIndex);
+    localStorage.setItem(projectIndexKey, JSON.stringify(updatedReviews));
+    
+    console.log(`Notes saved for project ${projectId}, review ${reviewId}`);
+    return true;
+  } catch (error) {
+    console.error('Error saving project notes:', error);
+    return false;
+  }
+};
+
+export const clearProjectNotes = (projectId: string, reviewId: string = 'default') => {
+  try {
+    const storageKey = `magnet-review-${projectId}-${reviewId}`;
+    localStorage.removeItem(storageKey);
+    
+    // Also remove from project index
+    const projectIndexKey = `magnet-project-reviews-${projectId}`;
+    const existingReviews = JSON.parse(localStorage.getItem(projectIndexKey) || "[]");
+    const updatedReviews = existingReviews.filter((r: any) => r.reviewId !== reviewId);
+    localStorage.setItem(projectIndexKey, JSON.stringify(updatedReviews));
+    
+    console.log(`Notes cleared for project ${projectId}, review ${reviewId}`);
+    return true;
+  } catch (error) {
+    console.error('Error clearing project notes:', error);
+    return false;
+  }
+};
+
+export const getAllProjectReviews = (projectId: string) => {
+  try {
+    const projectIndexKey = `magnet-project-reviews-${projectId}`;
+    return JSON.parse(localStorage.getItem(projectIndexKey) || "[]");
+  } catch (error) {
+    console.error('Error loading project reviews:', error);
+    return [];
+  }
+};
+
 interface MagnetReviewPanelProps {
   activeTab?: string;
   projectId?: string;
@@ -100,7 +172,7 @@ const MagnetReviewPanelInner: React.FC<MagnetReviewPanelProps> = ({
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Generate storage key for persistence
+  // Generate unique storage key for this specific project and review
   const storageKey = `magnet-review-${projectId}-${reviewId}`;
 
   // Auto-save functionality with debouncing
@@ -116,8 +188,23 @@ const MagnetReviewPanelInner: React.FC<MagnetReviewPanelProps> = ({
       // Set new timeout for auto-save
       autoSaveTimeoutRef.current = setTimeout(() => {
         try {
+          // Save with project-specific key
           localStorage.setItem(storageKey, JSON.stringify(updatedResponses));
           setAutoSaveStatus("saved");
+
+          // Also save to a project index for easier management
+          const projectIndexKey = `magnet-project-reviews-${projectId}`;
+          const existingReviews = JSON.parse(localStorage.getItem(projectIndexKey) || "[]");
+          const reviewIndex = {
+            reviewId,
+            lastSaved: new Date().toISOString(),
+            storageKey
+          };
+          
+          // Update or add this review to the project's review index
+          const updatedReviews = existingReviews.filter((r: any) => r.reviewId !== reviewId);
+          updatedReviews.push(reviewIndex);
+          localStorage.setItem(projectIndexKey, JSON.stringify(updatedReviews));
 
           // Reset status after 2 seconds
           setTimeout(() => setAutoSaveStatus("idle"), 2000);
@@ -127,7 +214,7 @@ const MagnetReviewPanelInner: React.FC<MagnetReviewPanelProps> = ({
         }
       }, 1000); // 1 second debounce
     },
-    [storageKey],
+    [storageKey, projectId, reviewId],
   );
 
   const handleResponseChange = (questionId: string, answer: string) => {
@@ -201,7 +288,7 @@ const MagnetReviewPanelInner: React.FC<MagnetReviewPanelProps> = ({
         notes,
       );
 
-      // Trigger auto-save
+      // Trigger auto-save with project-specific storage
       triggerAutoSave(updatedResponses);
 
       return updatedResponses;
@@ -276,12 +363,17 @@ const MagnetReviewPanelInner: React.FC<MagnetReviewPanelProps> = ({
       if (savedResponses) {
         const parsedResponses = JSON.parse(savedResponses);
         setResponses(parsedResponses);
-        console.log("Loaded saved responses:", parsedResponses);
+        console.log(`Loaded saved responses for project ${projectId}, review ${reviewId}:`, parsedResponses);
+      } else {
+        console.log(`No saved responses found for project ${projectId}, review ${reviewId}`);
+        // Initialize empty responses for this project
+        setResponses({});
       }
     } catch (error) {
       console.error("Error loading saved responses:", error);
+      setResponses({});
     }
-  }, [storageKey]);
+  }, [storageKey, projectId, reviewId]);
 
   // Cleanup auto-save timeout on unmount
   useEffect(() => {

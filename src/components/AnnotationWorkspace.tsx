@@ -1716,8 +1716,8 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
 
       // Store the image data in localStorage for persistence
       // Convert file to base64 for storage (only for smaller files to avoid storage limits)
-      if (file.size <= 5 * 1024 * 1024) {
-        // 5MB limit for localStorage
+      if (file.size <= 10 * 1024 * 1024) {
+        // 10MB limit for localStorage (increased for better support)
         const reader = new FileReader();
         reader.onload = (e) => {
           try {
@@ -1729,16 +1729,37 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
               size: file.size,
               lastModified: file.lastModified,
               tabUrl: fileTabUrl,
+              uploadedAt: new Date().toISOString(),
             };
             localStorage.setItem(
               `${projectStateKey}-file-${fileTabUrl}`,
               JSON.stringify(imageData),
             );
+            console.log(
+              `File saved to project: ${file.name} (${(file.size / 1024 / 1024).toFixed(1)}MB)`,
+            );
           } catch (storageError) {
             console.warn("Could not store file in localStorage:", storageError);
+            // Show user-friendly error if storage fails
+            toast({
+              title: "Storage warning",
+              description:
+                "File uploaded successfully but may not persist between sessions due to storage limitations.",
+              variant: "destructive",
+              duration: 4000,
+            });
           }
         };
         reader.readAsDataURL(file);
+      } else {
+        // For files larger than 10MB, show a warning
+        toast({
+          title: "Large file warning",
+          description:
+            "File is too large to save to project. It will be available during this session only.",
+          variant: "destructive",
+          duration: 5000,
+        });
       }
 
       // Switch to the uploaded file
@@ -1751,10 +1772,10 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
       toast({
         title:
           file.type === "application/pdf"
-            ? "PDF loaded successfully"
-            : "Screenshot loaded successfully",
-        description: `${file.name} (${(file.size / 1024 / 1024).toFixed(1)}MB) loaded at original quality. You can now annotate and review the ${file.type === "application/pdf" ? "PDF" : "screenshot"}.`,
-        duration: 4000,
+            ? "PDF loaded and saved to project"
+            : "Screenshot loaded and saved to project",
+        description: `${file.name} (${(file.size / 1024 / 1024).toFixed(1)}MB) loaded at original quality and saved to project ${projectId}. You can now annotate and review the ${file.type === "application/pdf" ? "PDF" : "screenshot"}.`,
+        duration: 5000,
       });
     } catch (error) {
       console.error("Error loading screenshot:", error);
@@ -1851,8 +1872,11 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
       }
     };
 
-    loadPersistedFiles();
-  }, [isStateLoaded, projectStateKey, urlTabs.length]);
+    // Only load files if we have tabs to load
+    if (urlTabs.length > 0) {
+      loadPersistedFiles();
+    }
+  }, [isStateLoaded, projectStateKey, currentUrl]);
 
   // Load project state on mount
   useEffect(() => {
@@ -1872,7 +1896,17 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
 
           // Restore URL tabs
           if (state.urlTabs && Array.isArray(state.urlTabs)) {
-            setUrlTabs(state.urlTabs);
+            // Ensure file tabs have proper structure
+            const restoredTabs = state.urlTabs.map((tab: any) => ({
+              ...tab,
+              // Ensure file tabs maintain their file properties
+              isFile: tab.isFile || false,
+              fileName: tab.fileName || null,
+              fileType: tab.fileType || null,
+              // Don't restore fileUrl - it will be recreated from localStorage
+              fileUrl: undefined,
+            }));
+            setUrlTabs(restoredTabs);
           }
 
           // Restore current URL if different from initial
@@ -1949,7 +1983,11 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
     const saveProjectState = () => {
       try {
         const state = {
-          urlTabs,
+          urlTabs: urlTabs.map((tab) => ({
+            ...tab,
+            // Don't save fileUrl in state - it will be recreated from localStorage
+            fileUrl: undefined,
+          })),
           currentUrl,
           // Don't save screenshotUrl in state - it's managed separately in localStorage
           selectedDevice,
@@ -1966,6 +2004,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
         };
 
         localStorage.setItem(projectStateKey, JSON.stringify(state));
+        console.log(`Project state saved for ${projectId}-${reviewId}`);
       } catch (error) {
         console.error("Error saving project state:", error);
       }

@@ -151,9 +151,11 @@ export const useProjectActions = () => {
     onProjectCreated: (project: Project) => void,
   ) => {
     try {
-      // Generate a unique ID for the new project
+      // Generate a unique ID for the new project with timestamp and random component
+      const timestamp = Date.now();
+      const randomId = Math.random().toString(36).substr(2, 9);
       const newProject: Project = {
-        id: `project-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        id: `project-${timestamp}-${randomId}`,
         name: projectData.name,
         url: projectData.url,
         clientName: projectData.clientName,
@@ -172,6 +174,12 @@ export const useProjectActions = () => {
           "magnet-projects",
           JSON.stringify(updatedProjects),
         );
+        
+        // Initialize empty notes storage for this project
+        const projectNotesKey = `magnet-project-reviews-${newProject.id}`;
+        localStorage.setItem(projectNotesKey, JSON.stringify([]));
+        
+        console.log(`Created new project with unique ID: ${newProject.id}`);
       } catch (storageError) {
         console.error("Error saving project to localStorage:", storageError);
       }
@@ -181,7 +189,7 @@ export const useProjectActions = () => {
 
       toast({
         title: "Project created successfully!",
-        description: `"${projectData.name}" has been created and is ready for review.`,
+        description: `"${projectData.name}" has been created with ID ${newProject.id} and is ready for review.`,
         duration: 3000,
       });
 
