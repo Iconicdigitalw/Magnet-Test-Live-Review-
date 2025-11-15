@@ -165,9 +165,6 @@ const MagnetReviewPanelInner: React.FC<MagnetReviewPanelProps> = ({
   const [currentVisibleTab, setCurrentVisibleTab] =
     useState<string>(initialTab);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [autoSaveStatus, setAutoSaveStatus] = useState<
-    "idle" | "saving" | "saved"
-  >("idle");
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -175,7 +172,7 @@ const MagnetReviewPanelInner: React.FC<MagnetReviewPanelProps> = ({
   // Generate unique storage key for this specific project and review
   const storageKey = `magnet-review-${projectId}-${reviewId}`;
 
-  // Auto-save functionality with debouncing
+  // Silent auto-save functionality with debouncing
   const triggerAutoSave = useCallback(
     (updatedResponses: Record<string, { answer: string; notes: string }>) => {
       // Clear existing timeout
@@ -183,14 +180,11 @@ const MagnetReviewPanelInner: React.FC<MagnetReviewPanelProps> = ({
         clearTimeout(autoSaveTimeoutRef.current);
       }
 
-      setAutoSaveStatus("saving");
-
-      // Set new timeout for auto-save
+      // Set new timeout for auto-save (silent - no UI updates)
       autoSaveTimeoutRef.current = setTimeout(() => {
         try {
           // Save with project-specific key
           localStorage.setItem(storageKey, JSON.stringify(updatedResponses));
-          setAutoSaveStatus("saved");
 
           // Also save to a project index for easier management
           const projectIndexKey = `magnet-project-reviews-${projectId}`;
@@ -205,14 +199,10 @@ const MagnetReviewPanelInner: React.FC<MagnetReviewPanelProps> = ({
           const updatedReviews = existingReviews.filter((r: any) => r.reviewId !== reviewId);
           updatedReviews.push(reviewIndex);
           localStorage.setItem(projectIndexKey, JSON.stringify(updatedReviews));
-
-          // Reset status after 2 seconds
-          setTimeout(() => setAutoSaveStatus("idle"), 2000);
         } catch (error) {
           console.error("Auto-save failed:", error);
-          setAutoSaveStatus("idle");
         }
-      }, 1000); // 1 second debounce
+      }, 500); // 500ms debounce for responsive saving
     },
     [storageKey, projectId, reviewId],
   );
@@ -1070,7 +1060,7 @@ const MagnetReviewPanelInner: React.FC<MagnetReviewPanelProps> = ({
             </Button>
           </div>
 
-          {/* Progress and Auto-save Status */}
+          {/* Progress */}
           <div className="flex items-center gap-3 flex-1 min-w-0">
             {/* Compact Progress */}
             <div className="flex items-center gap-2 text-xs text-muted-foreground min-w-0">
@@ -1086,22 +1076,6 @@ const MagnetReviewPanelInner: React.FC<MagnetReviewPanelProps> = ({
               <span className="whitespace-nowrap shrink-0">
                 {getCompletionStats().answered}/{getCompletionStats().total}
               </span>
-            </div>
-
-            {/* Auto-save Status */}
-            <div className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
-              {autoSaveStatus === "saving" && (
-                <>
-                  <Clock className="h-3 w-3 animate-pulse" />
-                  <span>Saving...</span>
-                </>
-              )}
-              {autoSaveStatus === "saved" && (
-                <>
-                  <CheckCircle className="h-3 w-3 text-green-500" />
-                  <span className="text-green-600">Saved</span>
-                </>
-              )}
             </div>
           </div>
 
