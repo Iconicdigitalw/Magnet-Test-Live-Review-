@@ -44,8 +44,10 @@ import {
   Upload,
   AlertCircle,
   RotateCcw,
+  Columns,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -75,10 +77,11 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/hooks/use-toast";
 
 interface AnnotationWorkspaceProps {
   url?: string;
@@ -191,6 +194,23 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
   const [isNotesOpen, setIsNotesOpen] = useState<boolean>(false);
   const [noteContent, setNoteContent] = useState<string>("");
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  
+  // Split screen state
+  const [isSplitView, setIsSplitView] = useState<boolean>(false);
+  const [splitViewUrls, setSplitViewUrls] = useState<{
+    left: string;
+    right: string;
+  }>({ left: "", right: "" });
+  const [splitViewLoadingStates, setSplitViewLoadingStates] = useState<{
+    left: boolean;
+    right: boolean;
+  }>({ left: false, right: false });
+  const iframeLeftRef = useRef<HTMLIFrameElement>(null);
+  const iframeRightRef = useRef<HTMLIFrameElement>(null);
+  const [showSplitViewDialog, setShowSplitViewDialog] = useState<boolean>(false);
+  const [selectedLeftTab, setSelectedLeftTab] = useState<string>("");
+  const [selectedRightTab, setSelectedRightTab] = useState<string>("");
+  
   const [showRecordingDialog, setShowRecordingDialog] =
     useState<boolean>(false);
   const [recordingOptions, setRecordingOptions] = useState({
@@ -414,6 +434,84 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
   const clearAllTabs = () => {
     setUrlTabs([]);
     setShowUrlDropdown(false);
+  };
+
+  // Split view handlers
+  const openSplitViewDialog = () => {
+    // Create a combined list of all available URLs including the current project URL
+    const allAvailableUrls = [
+      {
+        id: 'current-project',
+        url: currentUrl,
+        title: getDomainFromUrl(currentUrl),
+        isFile: false,
+      },
+      ...urlTabs
+    ];
+
+    if (allAvailableUrls.length < 2) {
+      toast({
+        title: "Insufficient URLs",
+        description: "You need at least 2 URLs to use split view.",
+        variant: "destructive",
+        duration: 3000,
+      });
+      return;
+    }
+
+    // Pre-select first two available URLs
+    setSelectedLeftTab(allAvailableUrls[0].url);
+    setSelectedRightTab(allAvailableUrls[1]?.url || "");
+    setShowSplitViewDialog(true);
+    setShowUrlDropdown(false);
+  };
+
+  const confirmSplitView = () => {
+    if (!selectedLeftTab || !selectedRightTab) {
+      toast({
+        title: "Selection Required",
+        description: "Please select URLs for both left and right panels.",
+        variant: "destructive",
+        duration: 3000,
+      });
+      return;
+    }
+
+    if (selectedLeftTab === selectedRightTab) {
+      toast({
+        title: "Different URLs Required",
+        description: "Please select different URLs for comparison.",
+        variant: "destructive",
+        duration: 3000,
+      });
+      return;
+    }
+
+    setSplitViewUrls({ left: selectedLeftTab, right: selectedRightTab });
+    setIsSplitView(true);
+    setShowSplitViewDialog(false);
+    setSplitViewLoadingStates({ left: true, right: true });
+    
+    toast({
+      title: "Split view enabled",
+      description: "Comparing two websites side by side.",
+      duration: 3000,
+    });
+  };
+
+  const exitSplitView = () => {
+    setIsSplitView(false);
+    setSplitViewUrls({ left: "", right: "" });
+    setSplitViewLoadingStates({ left: false, right: false });
+  };
+
+  const switchSplitViewUrl = (side: "left" | "right", newUrl: string) => {
+    setSplitViewUrls((prev) => ({ ...prev, [side]: newUrl }));
+    setSplitViewLoadingStates((prev) => ({ ...prev, [side]: true }));
+  };
+
+  const handleSplitViewIframeLoad = (side: "left" | "right") => {
+    setSplitViewLoadingStates((prev) => ({ ...prev, [side]: false }));
   };
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -1964,6 +2062,15 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
             setIsNotesOpen(state.isNotesOpen);
           }
 
+          // Restore split view state
+          if (typeof state.isSplitView === "boolean") {
+            setIsSplitView(state.isSplitView);
+          }
+
+          if (state.splitViewUrls) {
+            setSplitViewUrls(state.splitViewUrls);
+          }
+
           console.log("Project state restored successfully");
         }
       } catch (error) {
@@ -2000,6 +2107,8 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
           annotationTool,
           annotationColor,
           isNotesOpen,
+          isSplitView,
+          splitViewUrls,
           lastSaved: new Date().toISOString(),
         };
 
@@ -2029,6 +2138,8 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
     annotationTool,
     annotationColor,
     isNotesOpen,
+    isSplitView,
+    splitViewUrls,
   ]);
 
   // Cleanup timeout and screenshot URL on unmount
@@ -2407,15 +2518,30 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
                     <span className="text-xs font-semibold text-muted-foreground">
                       Saved URLs ({urlTabs.length})
                     </span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={clearAllTabs}
-                      className="h-6 px-2 text-xs text-muted-foreground hover:text-destructive"
-                    >
-                      Clear All
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      {urlTabs.length >= 1 && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={openSplitViewDialog}
+                          className="h-6 px-2 text-xs hover:bg-primary/10 flex items-center gap-1"
+                          title="Split View"
+                        >
+                          <Columns className="h-3.5 w-3.5" />
+                          <span>Split View</span>
+                        </Button>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={clearAllTabs}
+                        className="h-6 px-2 text-xs text-muted-foreground hover:text-destructive"
+                      >
+                        Clear All
+                      </Button>
+                    </div>
                   </div>
+                  
                   <div className="max-h-60 overflow-y-auto">
                     {urlTabs.map((tab) => (
                       <DropdownMenuItem
@@ -3034,248 +3160,373 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
         <div
           className={`flex justify-center items-start overflow-auto h-full ${isFullscreen ? "bg-gray-900 p-0" : "bg-gray-100 p-4"}`}
         >
-          <div
-            className={`relative bg-white ${isFullscreen ? "" : "shadow-lg"}`}
-            style={{
-              width: isFullscreen ? "100vw" : `${scaledWidth}px`,
-              height: isFullscreen ? "100vh" : `${scaledHeight}px`,
-              maxWidth: isFullscreen ? "100vw" : "100%",
-              maxHeight: isFullscreen ? "100vh" : "100%",
-              overflow: "hidden",
-              transform: isFullscreen ? "none" : `scale(1)`,
-            }}
-          >
-            {isLoading && (
-              <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10">
-                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
-              </div>
-            )}
+          {/* Exit Split View Button */}
+          {isSplitView && (
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
+              <Button
+                onClick={exitSplitView}
+                variant="default"
+                size="sm"
+                className="shadow-lg"
+              >
+                <X className="h-4 w-4 mr-2" />
+                Exit Split View
+              </Button>
+            </div>
+          )}
 
-            {/* Full Page Capture Progress Overlay */}
-            {isCapturing && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/60 z-20">
-                <div className="bg-background rounded-lg p-6 shadow-2xl max-w-sm w-full mx-4">
-                  <div className="text-center space-y-4">
-                    <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary mx-auto"></div>
-                    <div>
-                      <h3 className="font-semibold text-lg mb-2">
-                        Capturing Full Page
-                      </h3>
-                      <p className="text-sm text-muted-foreground mb-3">
-                        {captureProgress.status}
-                      </p>
-                      {captureProgress.total > 0 && (
-                        <div className="space-y-2">
-                          <div className="flex justify-between text-xs text-muted-foreground">
-                            <span>Progress</span>
-                            <span>
-                              {captureProgress.current} /{" "}
-                              {captureProgress.total}
+          {isSplitView ? (
+            /* Split View - Two Sites Side by Side */
+            <div className="flex gap-4 w-full h-full p-4">
+              {/* Left Panel */}
+              <div className="flex-1 flex flex-col gap-2">
+                {/* Left URL Selector */}
+                <div className="bg-background border rounded-md p-2 flex items-center gap-2">
+                  <span className="text-xs font-medium">Left:</span>
+                  <Select
+                    value={splitViewUrls.left}
+                    onValueChange={(url) => switchSplitViewUrl("left", url)}
+                  >
+                    <SelectTrigger className="h-8 text-xs flex-1">
+                      <SelectValue placeholder="Select URL" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {urlTabs.map((tab) => (
+                        <SelectItem key={tab.id} value={tab.url}>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs truncate max-w-[200px]">
+                              {tab.title}
                             </span>
                           </div>
-                          <div className="w-full bg-secondary rounded-full h-2">
-                            <div
-                              className="bg-primary h-2 rounded-full transition-all duration-300"
-                              style={{
-                                width: `${Math.min((captureProgress.current / captureProgress.total) * 100, 100)}%`,
-                              }}
-                            ></div>
-                          </div>
-                        </div>
-                      )}
-                      <p className="text-xs text-muted-foreground mt-3">
-                        Please keep this tab active during capture
-                      </p>
-                    </div>
-                  </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-              </div>
-            )}
 
-            {/* Website iframe, screenshot, or PDF */}
-            {screenshotUrl ? (
-              <div
-                className="w-full h-full overflow-auto bg-gray-50"
-                style={{
-                  width: isFullscreen ? "100vw" : `${currentDevice.width}px`,
-                  height: isFullscreen ? "100vh" : `${currentDevice.height}px`,
-                  transform: isFullscreen ? "none" : `scale(${zoomLevel})`,
-                  transformOrigin: "top left",
-                }}
-              >
-                {/* Check if the loaded file is a PDF */}
-                {screenshotUrl.includes("data:application/pdf") ||
-                screenshotUrl.includes(".pdf") ? (
+                {/* Left Viewport */}
+                <div
+                  className="relative bg-white shadow-lg flex-1"
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    overflow: "hidden",
+                  }}
+                >
+                  {splitViewLoadingStates.left && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10">
+                      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+                    </div>
+                  )}
                   <iframe
-                    src={screenshotUrl}
+                    ref={iframeLeftRef}
+                    src={splitViewUrls.left}
+                    onLoad={() => handleSplitViewIframeLoad("left")}
                     className="w-full h-full border-0"
-                    style={{
-                      width: "100%",
-                      height: "100%",
-                      minHeight: isFullscreen
-                        ? "100vh"
-                        : `${currentDevice.height}px`,
-                    }}
-                    title="PDF Viewer"
-                    onLoad={() => {
-                      console.log("PDF loaded successfully");
-                    }}
-                    onError={(e) => {
-                      console.error("PDF failed to load:", e);
-                      toast({
-                        title: "PDF load error",
-                        description:
-                          "The PDF could not be displayed. Please try uploading again or use a different PDF viewer.",
-                        variant: "destructive",
-                        duration: 3000,
-                      });
-                    }}
+                    sandbox="allow-same-origin allow-scripts allow-forms allow-top-navigation allow-popups allow-modals allow-downloads"
+                    allow="fullscreen; camera; microphone; geolocation; payment; autoplay; clipboard-read; clipboard-write"
+                    referrerPolicy="no-referrer-when-downgrade"
                   />
-                ) : (
-                  <img
-                    src={screenshotUrl}
-                    alt="Website screenshot"
-                    className="w-full h-auto"
-                    style={{
-                      maxWidth: "100%",
-                      display: "block",
-                      imageRendering: "high-quality", // Use high-quality rendering
-                      objectFit: "contain", // Maintain aspect ratio without cropping
-                      objectPosition: "top left", // Align to top-left for consistency
-                      filter: "none", // Ensure no filters are applied
-                      transform: "none", // Ensure no transforms are applied
-                    }}
-                    loading="eager" // Load immediately for better quality perception
-                    decoding="sync" // Synchronous decoding for immediate display
-                    onLoad={(e) => {
-                      // Ensure the image maintains its natural dimensions
-                      const img = e.target as HTMLImageElement;
-                      console.log(
-                        `Screenshot loaded: ${img.naturalWidth}x${img.naturalHeight}px`,
-                      );
-                    }}
-                    onError={(e) => {
-                      console.error("Screenshot failed to load:", e);
-                      toast({
-                        title: "Screenshot load error",
-                        description:
-                          "The screenshot could not be displayed. Please try uploading again.",
-                        variant: "destructive",
-                        duration: 3000,
-                      });
-                    }}
-                  />
-                )}
-              </div>
-            ) : (
-              <iframe
-                ref={iframeRef}
-                key={`iframe-${currentUrl}`}
-                src={currentUrl}
-                onLoad={handleIframeLoad}
-                className="w-full h-full border-0 border-transparent border-none"
-                style={{
-                  width: isFullscreen ? "100vw" : `${currentDevice.width}px`,
-                  height: isFullscreen ? "100vh" : `${currentDevice.height}px`,
-                  transform: isFullscreen ? "none" : `scale(${zoomLevel})`,
-                  transformOrigin: "top left",
-                }}
-                sandbox="allow-same-origin allow-scripts allow-forms allow-top-navigation allow-popups allow-modals allow-downloads"
-                allow="fullscreen; camera; microphone; geolocation; payment; autoplay; clipboard-read; clipboard-write"
-                referrerPolicy="no-referrer-when-downgrade"
-                onError={handleIframeError}
-              />
-            )}
-
-            {/* Screenshot Options Overlay */}
-            {showScreenshotOptions && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/60 z-30">
-                <div className="bg-background rounded-lg p-6 shadow-2xl max-w-md w-full mx-4">
-                  <div className="text-center space-y-4">
-                    <AlertCircle className="h-12 w-12 mx-auto text-destructive" />
-                    <div>
-                      <h3 className="font-semibold text-lg mb-2">
-                        Website Cannot Load
-                      </h3>
-                      <p className="text-sm text-muted-foreground mb-4">
-                        This website refuses to load in an iframe due to
-                        security restrictions. You can upload a screenshot to
-                        continue your review.
-                      </p>
-                    </div>
-
-                    <div className="space-y-3">
-                      <Button
-                        onClick={() => fileInputRef.current?.click()}
-                        className="w-full flex items-center justify-center gap-2"
-                      >
-                        <Upload className="h-4 w-4" />
-                        Upload Screenshot
-                      </Button>
-
-                      <Button
-                        onClick={handleRetryUrl}
-                        variant="outline"
-                        className="w-full flex items-center justify-center gap-2"
-                      >
-                        <RotateCcw className="h-4 w-4" />
-                        Retry Loading URL
-                      </Button>
-
-                      <Button
-                        onClick={() => {
-                          setShowScreenshotOptions(false);
-                          setIframeLoadError(false);
-                        }}
-                        variant="ghost"
-                        className="w-full"
-                      >
-                        Cancel
-                      </Button>
-                    </div>
-
-                    <p className="text-xs text-muted-foreground mt-4">
-                      Supported formats: PNG, JPG, JPEG, WebP, BMP, TIFF, PDF
-                      <br />
-                      Files are preserved at original quality without
-                      compression
-                    </p>
-                  </div>
                 </div>
               </div>
-            )}
 
-            {/* Hidden file input */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/png,image/jpeg,image/jpg,image/webp,image/bmp,image/tiff,application/pdf"
-              onChange={handleLoadScreenshot}
-              className="hidden"
-            />
+              {/* Right Panel */}
+              <div className="flex-1 flex flex-col gap-2">
+                {/* Right URL Selector */}
+                <div className="bg-background border rounded-md p-2 flex items-center gap-2">
+                  <span className="text-xs font-medium">Right:</span>
+                  <Select
+                    value={splitViewUrls.right}
+                    onValueChange={(url) => switchSplitViewUrl("right", url)}
+                  >
+                    <SelectTrigger className="h-8 text-xs flex-1">
+                      <SelectValue placeholder="Select URL" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {urlTabs.map((tab) => (
+                        <SelectItem key={tab.id} value={tab.url}>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs truncate max-w-[200px]">
+                              {tab.title}
+                            </span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-            {/* Annotation overlay */}
-            <LiveAnnotationOverlay
-              key={`overlay-${magnetActiveTab}`}
-              reviewId={reviewId}
-              tabId={magnetActiveTab}
-              tabColor={getTabColor(magnetActiveTab)}
-              width={isFullscreen ? window.innerWidth : currentDevice.width}
-              height={isFullscreen ? window.innerHeight : currentDevice.height}
-              scrollTop={scrollPosition.y}
-              scrollLeft={scrollPosition.x}
-              zoomLevel={isFullscreen ? 1.0 : zoomLevel}
-              isVisible={showAnnotationTools}
-              iframeRef={iframeRef}
-              activeTool={annotationTool}
-              selectedColor={annotationColor}
-              clearMode={clearMode}
-              onClearComplete={handleClearComplete}
-              onAnnotationChange={(annotations) => {
-                console.log("Annotations changed:", annotations);
+                {/* Right Viewport */}
+                <div
+                  className="relative bg-white shadow-lg flex-1"
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    overflow: "hidden",
+                  }}
+                >
+                  {splitViewLoadingStates.right && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10">
+                      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+                    </div>
+                  )}
+                  <iframe
+                    ref={iframeRightRef}
+                    src={splitViewUrls.right}
+                    onLoad={() => handleSplitViewIframeLoad("right")}
+                    className="w-full h-full border-0"
+                    sandbox="allow-same-origin allow-scripts allow-forms allow-top-navigation allow-popups allow-modals allow-downloads"
+                    allow="fullscreen; camera; microphone; geolocation; payment; autoplay; clipboard-read; clipboard-write"
+                    referrerPolicy="no-referrer-when-downgrade"
+                  />
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* Normal Single View */
+            <div
+              className={`relative bg-white ${isFullscreen ? "" : "shadow-lg"}`}
+              style={{
+                width: isFullscreen ? "100vw" : `${scaledWidth}px`,
+                height: isFullscreen ? "100vh" : `${scaledHeight}px`,
+                maxWidth: isFullscreen ? "100vw" : "100%",
+                maxHeight: isFullscreen ? "100vh" : "100%",
+                overflow: "hidden",
+                transform: isFullscreen ? "none" : `scale(1)`,
               }}
-            />
-          </div>
+            >
+              {isLoading && (
+                <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10">
+                  <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+                </div>
+              )}
+
+              {/* Full Page Capture Progress Overlay */}
+              {isCapturing && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/60 z-20">
+                  <div className="bg-background rounded-lg p-6 shadow-2xl max-w-sm w-full mx-4">
+                    <div className="text-center space-y-4">
+                      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary mx-auto"></div>
+                      <div>
+                        <h3 className="font-semibold text-lg mb-2">
+                          Capturing Full Page
+                        </h3>
+                        <p className="text-sm text-muted-foreground mb-3">
+                          {captureProgress.status}
+                        </p>
+                        {captureProgress.total > 0 && (
+                          <div className="space-y-2">
+                            <div className="flex justify-between text-xs text-muted-foreground">
+                              <span>Progress</span>
+                              <span>
+                                {captureProgress.current} /{" "}
+                                {captureProgress.total}
+                              </span>
+                            </div>
+                            <div className="w-full bg-secondary rounded-full h-2">
+                              <div
+                                className="bg-primary h-2 rounded-full transition-all duration-300"
+                                style={{
+                                  width: `${Math.min((captureProgress.current / captureProgress.total) * 100, 100)}%`,
+                                }}
+                              ></div>
+                            </div>
+                          </div>
+                        )}
+                        <p className="text-xs text-muted-foreground mt-3">
+                          Please keep this tab active during capture
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Website iframe, screenshot, or PDF */}
+              {screenshotUrl ? (
+                <div
+                  className="w-full h-full overflow-auto bg-gray-50"
+                  style={{
+                    width: isFullscreen ? "100vw" : `${currentDevice.width}px`,
+                    height: isFullscreen ? "100vh" : `${currentDevice.height}px`,
+                    transform: isFullscreen ? "none" : `scale(${zoomLevel})`,
+                    transformOrigin: "top left",
+                  }}
+                >
+                  {/* Check if the loaded file is a PDF */}
+                  {screenshotUrl.includes("data:application/pdf") ||
+                  screenshotUrl.includes(".pdf") ? (
+                    <iframe
+                      src={screenshotUrl}
+                      className="w-full h-full border-0"
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        minHeight: isFullscreen
+                          ? "100vh"
+                          : `${currentDevice.height}px`,
+                      }}
+                      title="PDF Viewer"
+                      onLoad={() => {
+                        console.log("PDF loaded successfully");
+                      }}
+                      onError={(e) => {
+                        console.error("PDF failed to load:", e);
+                        toast({
+                          title: "PDF load error",
+                          description:
+                            "The PDF could not be displayed. Please try uploading again or use a different PDF viewer.",
+                          variant: "destructive",
+                          duration: 3000,
+                        });
+                      }}
+                    />
+                  ) : (
+                    <img
+                      src={screenshotUrl}
+                      alt="Website screenshot"
+                      className="w-full h-auto"
+                      style={{
+                        maxWidth: "100%",
+                        display: "block",
+                        imageRendering: "high-quality", // Use high-quality rendering
+                        objectFit: "contain", // Maintain aspect ratio without cropping
+                        objectPosition: "top left", // Align to top-left for consistency
+                        filter: "none", // Ensure no filters are applied
+                        transform: "none", // Ensure no transforms are applied
+                      }}
+                      loading="eager" // Load immediately for better quality perception
+                      decoding="sync" // Synchronous decoding for immediate display
+                      onLoad={(e) => {
+                        // Ensure the image maintains its natural dimensions
+                        const img = e.target as HTMLImageElement;
+                        console.log(
+                          `Screenshot loaded: ${img.naturalWidth}x${img.naturalHeight}px`,
+                        );
+                      }}
+                      onError={(e) => {
+                        console.error("Screenshot failed to load:", e);
+                        toast({
+                          title: "Screenshot load error",
+                          description:
+                            "The screenshot could not be displayed. Please try uploading again.",
+                          variant: "destructive",
+                          duration: 3000,
+                        });
+                      }}
+                    />
+                  )}
+                </div>
+              ) : (
+                <iframe
+                  ref={iframeRef}
+                  key={`iframe-${currentUrl}`}
+                  src={currentUrl}
+                  onLoad={handleIframeLoad}
+                  className="w-full h-full border-0 border-transparent border-none"
+                  style={{
+                    width: isFullscreen ? "100vw" : `${currentDevice.width}px`,
+                    height: isFullscreen ? "100vh" : `${currentDevice.height}px`,
+                    transform: isFullscreen ? "none" : `scale(${zoomLevel})`,
+                    transformOrigin: "top left",
+                  }}
+                  sandbox="allow-same-origin allow-scripts allow-forms allow-top-navigation allow-popups allow-modals allow-downloads"
+                  allow="fullscreen; camera; microphone; geolocation; payment; autoplay; clipboard-read; clipboard-write"
+                  referrerPolicy="no-referrer-when-downgrade"
+                  onError={handleIframeError}
+                />
+              )}
+
+              {/* Screenshot Options Overlay */}
+              {showScreenshotOptions && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/60 z-30">
+                  <div className="bg-background rounded-lg p-6 shadow-2xl max-w-md w-full mx-4">
+                    <div className="text-center space-y-4">
+                      <AlertCircle className="h-12 w-12 mx-auto text-destructive" />
+                      <div>
+                        <h3 className="font-semibold text-lg mb-2">
+                          Website Cannot Load
+                        </h3>
+                        <p className="text-sm text-muted-foreground mb-4">
+                          This website refuses to load in an iframe due to
+                          security restrictions. You can upload a screenshot to
+                          continue your review.
+                        </p>
+                      </div>
+
+                      <div className="space-y-3">
+                        <Button
+                          onClick={() => fileInputRef.current?.click()}
+                          className="w-full flex items-center justify-center gap-2"
+                        >
+                          <Upload className="h-4 w-4" />
+                          Upload Screenshot
+                        </Button>
+
+                        <Button
+                          onClick={handleRetryUrl}
+                          variant="outline"
+                          className="w-full flex items-center justify-center gap-2"
+                        >
+                          <RotateCcw className="h-4 w-4" />
+                          Retry Loading URL
+                        </Button>
+
+                        <Button
+                          onClick={() => {
+                            setShowScreenshotOptions(false);
+                            setIframeLoadError(false);
+                          }}
+                          variant="ghost"
+                          className="w-full"
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+
+                      <p className="text-xs text-muted-foreground mt-4">
+                        Supported formats: PNG, JPG, JPEG, WebP, BMP, TIFF, PDF
+                        <br />
+                        Files are preserved at original quality without
+                        compression
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Hidden file input */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/jpg,image/webp,image/bmp,image/tiff,application/pdf"
+                onChange={handleLoadScreenshot}
+                className="hidden"
+              />
+
+              {/* Annotation overlay */}
+              <LiveAnnotationOverlay
+                key={`overlay-${magnetActiveTab}`}
+                reviewId={reviewId}
+                tabId={magnetActiveTab}
+                tabColor={getTabColor(magnetActiveTab)}
+                width={isFullscreen ? window.innerWidth : currentDevice.width}
+                height={isFullscreen ? window.innerHeight : currentDevice.height}
+                scrollTop={scrollPosition.y}
+                scrollLeft={scrollPosition.x}
+                zoomLevel={isFullscreen ? 1.0 : zoomLevel}
+                isVisible={showAnnotationTools}
+                iframeRef={iframeRef}
+                activeTool={annotationTool}
+                selectedColor={annotationColor}
+                clearMode={clearMode}
+                onClearComplete={handleClearComplete}
+                onAnnotationChange={(annotations) => {
+                  console.log("Annotations changed:", annotations);
+                }}
+              />
+            </div>
+          )}
         </div>
 
         {/* Floating MAGNET Review Panel */}
@@ -3773,6 +4024,80 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
               >
                 <Play className="h-4 w-4" />
                 Start Recording
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Split View Selection Dialog */}
+        <Dialog open={showSplitViewDialog} onOpenChange={setShowSplitViewDialog}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Columns className="h-5 w-5" />
+                Select URLs to Compare
+              </DialogTitle>
+              <DialogDescription>
+                Choose two different URLs to display side by side for comparison.
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-4 py-4">
+              {/* Left Panel Selection */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Left Panel</label>
+                <select
+                  value={selectedLeftTab}
+                  onChange={(e) => setSelectedLeftTab(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-md bg-background text-sm"
+                >
+                  <option value="">Select URL...</option>
+                  {/* Current project URL */}
+                  <option value={currentUrl}>
+                    {getDomainFromUrl(currentUrl)} (Current)
+                  </option>
+                  {/* Additional saved URLs */}
+                  {urlTabs.map((tab) => (
+                    <option key={tab.id} value={tab.url}>
+                      {tab.title} {tab.isFile ? `(${tab.fileName})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Right Panel Selection */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Right Panel</label>
+                <select
+                  value={selectedRightTab}
+                  onChange={(e) => setSelectedRightTab(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-md bg-background text-sm"
+                >
+                  <option value="">Select URL...</option>
+                  {/* Current project URL */}
+                  <option value={currentUrl}>
+                    {getDomainFromUrl(currentUrl)} (Current)
+                  </option>
+                  {/* Additional saved URLs */}
+                  {urlTabs.map((tab) => (
+                    <option key={tab.id} value={tab.url}>
+                      {tab.title} {tab.isFile ? `(${tab.fileName})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setShowSplitViewDialog(false)}
+              >
+                Cancel
+              </Button>
+              <Button onClick={confirmSplitView}>
+                <Columns className="h-4 w-4 mr-2" />
+                Start Split View
               </Button>
             </DialogFooter>
           </DialogContent>
