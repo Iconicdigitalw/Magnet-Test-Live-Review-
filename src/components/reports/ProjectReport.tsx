@@ -1,39 +1,30 @@
 import React, { useState, useEffect } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   ArrowLeft,
-  Globe,
-  User,
-  Calendar,
-  BarChart3,
   FileText,
-  Video,
-  Camera,
-  TrendingUp,
-  AlertTriangle,
-  CheckCircle,
-  DollarSign,
-  Target,
-  Clock,
   ExternalLink,
+  Download,
+  LayoutDashboard,
+  Target,
+  Image as ImageIcon,
   MessageSquare,
   Eye,
   Navigation,
   Smile,
   Shield,
+  TrendingUp,
 } from "lucide-react";
 import { useSettings } from "@/contexts/SettingsContext";
 import { Project } from "@/data/mockData";
+import { getProjectNotes } from "@/components/MagnetReviewPanel";
+
+// Import Sections
+import ReportOverview from "./sections/ReportOverview";
+import ReportStrategy from "./sections/ReportStrategy";
+import MagnetCategoryDetail from "./sections/MagnetCategoryDetail";
+import ReportMedia from "./sections/ReportMedia";
 
 interface ProjectReportProps {
   project?: Project;
@@ -48,32 +39,41 @@ const ProjectReport: React.FC<ProjectReportProps> = ({
   const [project, setProject] = useState<Project | null>(propProject || null);
   const [reviewScores, setReviewScores] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isLightboxOpen, setIsLightboxOpen] = useState(false);
-  const [selectedMedia, setSelectedMedia] = useState<{
-    type: "video" | "image";
-    title: string;
-    src?: string;
-  } | null>(null);
+  const [activeTab, setActiveTab] = useState("overview");
+  const [projectResponses, setProjectResponses] = useState<Record<string, any>>(
+    {},
+  );
 
-  // Load project data if not provided as prop
+  // Load project data
   useEffect(() => {
-    if (!propProject && projectId) {
-      try {
-        const savedProjects = JSON.parse(
-          localStorage.getItem("magnet-projects") || "[]",
-        );
-        const foundProject = savedProjects.find(
-          (p: Project) => p.id === projectId,
-        );
-        setProject(foundProject || null);
-      } catch (error) {
-        console.error("Error loading project:", error);
+    const loadData = async () => {
+      if (!propProject && projectId) {
+        try {
+          const savedProjects = JSON.parse(
+            localStorage.getItem("magnet-projects") || "[]",
+          );
+          const foundProject = savedProjects.find(
+            (p: Project) => p.id === projectId,
+          );
+          setProject(foundProject || null);
+
+          if (foundProject) {
+            const notes = getProjectNotes(foundProject.id);
+            setProjectResponses(notes);
+          }
+        } catch (error) {
+          console.error("Error loading project:", error);
+        }
+      } else if (propProject) {
+        const notes = getProjectNotes(propProject.id);
+        setProjectResponses(notes);
       }
-    }
-    setIsLoading(false);
+      setIsLoading(false);
+    };
+
+    loadData();
   }, [projectId, propProject]);
 
-  // Load review scores
   useEffect(() => {
     if (project) {
       const scores = getReviewScores(project.id);
@@ -83,9 +83,9 @@ const ProjectReport: React.FC<ProjectReportProps> = ({
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#34386a] mx-auto mb-4"></div>
           <p className="text-muted-foreground">Loading report...</p>
         </div>
       </div>
@@ -94,13 +94,9 @@ const ProjectReport: React.FC<ProjectReportProps> = ({
 
   if (!project) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center space-y-4">
-          <AlertTriangle className="h-12 w-12 text-muted-foreground mx-auto" />
-          <h2 className="text-xl font-semibold">Project Not Found</h2>
-          <p className="text-muted-foreground">
-            The requested project could not be found.
-          </p>
+          <div className="text-xl font-semibold">Project Not Found</div>
           <Button onClick={() => navigate("/projects")}>
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back to Projects
@@ -110,13 +106,12 @@ const ProjectReport: React.FC<ProjectReportProps> = ({
     );
   }
 
-  // Calculate overall MAGNET score
+  // Calculate scores
   const latestScore = reviewScores[reviewScores.length - 1];
   const overallScore = latestScore
     ? Math.round((latestScore.totalScore / latestScore.maxPossibleScore) * 100)
     : 0;
 
-  // Get status color
   const getStatusColor = () => {
     switch (project.status) {
       case "active":
@@ -130,21 +125,12 @@ const ProjectReport: React.FC<ProjectReportProps> = ({
     }
   };
 
-  // Get score color based on percentage
   const getScoreColor = (score: number) => {
     if (score >= 80) return "text-green-600";
     if (score >= 60) return "text-yellow-600";
     return "text-red-600";
   };
 
-  // Get background color for score visualization
-  const getScoreBgColor = (score: number) => {
-    if (score >= 80) return "bg-green-100 border-green-200";
-    if (score >= 60) return "bg-yellow-100 border-yellow-200";
-    return "bg-red-100 border-red-200";
-  };
-
-  // Get MAGNET category icons
   const getCategoryIcon = (categoryId: string) => {
     const iconMap: Record<string, any> = {
       message: MessageSquare,
@@ -154,34 +140,10 @@ const ProjectReport: React.FC<ProjectReportProps> = ({
       experience: Smile,
       trust: Shield,
     };
-    return iconMap[categoryId.toLowerCase()] || BarChart3;
+    return iconMap[categoryId.toLowerCase()] || TrendingUp;
   };
 
-  // Calculate category scores for visualization
-  const getCategoryScores = () => {
-    if (!latestScore) return [];
-
-    return magnetCategories.map((category) => {
-      const categoryScore = latestScore.categoryScores[category.id] || 0;
-      const maxCategoryScore = category.questions
-        .filter((q) => q.points && q.points > 0)
-        .reduce((sum, q) => sum + (q.points || 0), 0);
-      const categoryPercentage =
-        maxCategoryScore > 0
-          ? Math.round((categoryScore / maxCategoryScore) * 100)
-          : 0;
-
-      return {
-        ...category,
-        score: categoryScore,
-        maxScore: maxCategoryScore,
-        percentage: categoryPercentage,
-        icon: getCategoryIcon(category.id),
-      };
-    });
-  };
-
-  // Mock data for demonstration
+  // Mock Data
   const mockRecommendations = [
     {
       category: "Message",
@@ -222,39 +184,57 @@ const ProjectReport: React.FC<ProjectReportProps> = ({
     },
   };
 
+  const topActions = [
+    {
+      label: "Revise homepage headline for clarity",
+      impact: "High",
+      effort: "Low",
+      eta: "1 week",
+    },
+    {
+      label: "Add trust signals and testimonials",
+      impact: "High",
+      effort: "Medium",
+      eta: "2 weeks",
+    },
+    {
+      label: "Optimize CTA button placement",
+      impact: "Medium",
+      effort: "Low",
+      eta: "3 days",
+    },
+  ];
+
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-white flex flex-col">
       {/* Header */}
-      <header className="border-b bg-card">
-        <div className="container flex h-16 items-center justify-between px-4">
-          <div className="flex items-center space-x-4">
-            <Button variant="ghost" onClick={() => navigate("/projects")}>
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to Projects
-            </Button>
-            <div className="w-px h-6 bg-border" />
-            <Link
-              to="/"
-              className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+      <header className="sticky top-0 z-30 border-b bg-white shadow-sm">
+        <div className="flex h-16 items-center justify-between px-6">
+          <div className="flex items-center gap-4">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate("/projects")}
             >
-              <img
-                src="/iconic-logo.png"
-                alt="Iconic Digital World Logo"
-                className="h-8 w-8"
-              />
-              <h1 className="text-xl font-bold">
-                MAGNET Test<sup className="text-xs">TM</sup> Live
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back
+            </Button>
+            <div className="h-6 w-px bg-gray-200" />
+            <div>
+              <h1 className="text-lg font-bold text-[#34386a]">
+                {project.name}
               </h1>
-            </Link>
+              <p className="text-xs text-muted-foreground">MAGNET Report</p>
+            </div>
           </div>
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center gap-2">
             <Button variant="outline" size="sm">
-              <FileText className="mr-2 h-4 w-4" />
+              <Download className="mr-2 h-4 w-4" />
               Export PDF
             </Button>
             <Button
-              variant="outline"
               size="sm"
+              className="bg-[#34386a] hover:bg-[#2a2e56]"
               onClick={() => window.open(project.url, "_blank")}
             >
               <ExternalLink className="mr-2 h-4 w-4" />
@@ -264,505 +244,132 @@ const ProjectReport: React.FC<ProjectReportProps> = ({
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="container px-4 py-6 space-y-6">
-        {/* Compact Project Overview Strip */}
-        <Card className="mb-6">
-          <CardContent className="py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-6">
-                <div>
-                  <h2 className="text-xl font-bold">{project.name}</h2>
-                  <div className="flex items-center space-x-4 text-sm text-muted-foreground mt-1">
-                    <div className="flex items-center">
-                      <Globe className="mr-1 h-3 w-3" />
-                      <span>{project.url}</span>
-                    </div>
-                    <div className="flex items-center">
-                      <User className="mr-1 h-3 w-3" />
-                      <span>{project.clientName}</span>
-                    </div>
-                    <div className="flex items-center">
-                      <Calendar className="mr-1 h-3 w-3" />
-                      <span>Updated {project.lastUpdated}</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-4">
-                  <div className="text-center">
-                    <div className="text-lg font-bold text-primary">
-                      {project.progress}%
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      Progress
-                    </div>
-                  </div>
-                  <div className="text-center">
-                    <div
-                      className={`text-lg font-bold ${getScoreColor(overallScore)}`}
-                    >
-                      {overallScore}%
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      MAGNET Score
-                    </div>
-                  </div>
-                </div>
+      {/* Main Layout with Sidebar */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Left Sidebar */}
+        <aside className="w-64 border-r bg-gray-50 overflow-y-auto">
+          <nav className="p-4 space-y-6">
+            {/* Main Sections */}
+            <div>
+              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 px-3">
+                Report Sections
               </div>
-              <div className="flex items-center space-x-4">
-                <Badge
-                  className={`px-3 py-1 ${getStatusColor()}`}
-                  variant="outline"
+              <div className="space-y-1">
+                <button
+                  onClick={() => setActiveTab("overview")}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    activeTab === "overview"
+                      ? "bg-white text-[#34386a] shadow-sm"
+                      : "text-gray-700 hover:bg-white/50"
+                  }`}
                 >
-                  {project.status.charAt(0).toUpperCase() +
-                    project.status.slice(1)}
-                </Badge>
-                <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-                  <Video className="h-4 w-4" />
-                  <span>3</span>
-                  <Camera className="h-4 w-4 ml-2" />
-                  <span>12</span>
-                  <Clock className="h-4 w-4 ml-2" />
-                  <span>2.5h</span>
-                </div>
+                  <LayoutDashboard className="h-4 w-4" />
+                  Executive Overview
+                </button>
+                <button
+                  onClick={() => setActiveTab("strategy")}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    activeTab === "strategy"
+                      ? "bg-white text-[#34386a] shadow-sm"
+                      : "text-gray-700 hover:bg-white/50"
+                  }`}
+                >
+                  <Target className="h-4 w-4" />
+                  Strategic Plan
+                </button>
+                <button
+                  onClick={() => setActiveTab("media")}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    activeTab === "media"
+                      ? "bg-white text-[#34386a] shadow-sm"
+                      : "text-gray-700 hover:bg-white/50"
+                  }`}
+                >
+                  <ImageIcon className="h-4 w-4" />
+                  Media & Notes
+                </button>
               </div>
             </div>
-          </CardContent>
-        </Card>
 
-        {/* MAGNET Donut Chart Scorecard */}
-        {latestScore && (
-          <Card className="mb-6">
-            <CardHeader className="pb-4">
-              <CardTitle className="flex items-center text-xl">
-                <BarChart3 className="mr-3 h-6 w-6" />
-                MAGNET Framework Score
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-center">
-                <div className="relative w-96 h-96">
-                  <svg
-                    className="w-96 h-96 transform -rotate-90"
-                    viewBox="0 0 200 200"
-                  >
-                    {(() => {
-                      const categoryScores = getCategoryScores();
-                      const radius = 70;
-                      const innerRadius = 50;
-                      const centerX = 100;
-                      const centerY = 100;
-                      let currentAngle = 0;
-
-                      const colors = [
-                        "#ef4444", // red
-                        "#3b82f6", // blue
-                        "#eab308", // yellow
-                        "#22c55e", // green
-                        "#a855f7", // purple
-                        "#f97316", // orange
-                      ];
-
-                      return categoryScores.map((category, index) => {
-                        const percentage = category.percentage / 100;
-                        const angle = percentage * 360;
-                        const startAngle = currentAngle;
-                        const endAngle = currentAngle + angle;
-
-                        const startRadians = (startAngle * Math.PI) / 180;
-                        const endRadians = (endAngle * Math.PI) / 180;
-
-                        const x1 = centerX + radius * Math.cos(startRadians);
-                        const y1 = centerY + radius * Math.sin(startRadians);
-                        const x2 = centerX + radius * Math.cos(endRadians);
-                        const y2 = centerY + radius * Math.sin(endRadians);
-
-                        const x3 = centerX + innerRadius * Math.cos(endRadians);
-                        const y3 = centerY + innerRadius * Math.sin(endRadians);
-                        const x4 =
-                          centerX + innerRadius * Math.cos(startRadians);
-                        const y4 =
-                          centerY + innerRadius * Math.sin(startRadians);
-
-                        const largeArcFlag = angle > 180 ? 1 : 0;
-
-                        const pathData = [
-                          `M ${x1} ${y1}`,
-                          `A ${radius} ${radius} 0 ${largeArcFlag} 1 ${x2} ${y2}`,
-                          `L ${x3} ${y3}`,
-                          `A ${innerRadius} ${innerRadius} 0 ${largeArcFlag} 0 ${x4} ${y4}`,
-                          "Z",
-                        ].join(" ");
-
-                        currentAngle = endAngle;
-
-                        return (
-                          <path
-                            key={category.id}
-                            d={pathData}
-                            fill={colors[index % colors.length]}
-                            opacity="0.9"
-                          />
-                        );
-                      });
-                    })()}
-                  </svg>
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="text-center">
-                      <div
-                        className={`text-5xl font-bold ${getScoreColor(overallScore)}`}
-                      >
-                        {overallScore}%
-                      </div>
-                      <div className="text-sm text-muted-foreground mt-2">
-                        Overall Score
-                      </div>
-                    </div>
-                  </div>
-                </div>
+            {/* MAGNET Categories */}
+            <div>
+              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 px-3">
+                MAGNET Deep Dive
               </div>
-              <div className="grid grid-cols-3 gap-4 mt-8">
-                {getCategoryScores().map((category, index) => {
-                  const IconComponent = category.icon;
-                  const colors = [
-                    "#ef4444",
-                    "#3b82f6",
-                    "#eab308",
-                    "#22c55e",
-                    "#a855f7",
-                    "#f97316",
-                  ];
+              <div className="space-y-1">
+                {magnetCategories.map((category) => {
+                  const Icon = getCategoryIcon(category.id);
                   return (
-                    <div
+                    <button
                       key={category.id}
-                      className="flex items-center space-x-3"
+                      onClick={() => setActiveTab(`category-${category.id}`)}
+                      className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        activeTab === `category-${category.id}`
+                          ? "bg-white text-[#34386a] shadow-sm"
+                          : "text-gray-700 hover:bg-white/50"
+                      }`}
                     >
-                      <div
-                        className="w-4 h-4 rounded-full"
-                        style={{
-                          backgroundColor: colors[index % colors.length],
-                        }}
-                      ></div>
-                      <div className="flex-1">
-                        <div className="text-sm font-medium">
-                          {category.name}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {category.percentage}% ({category.score}/
-                          {category.maxScore} pts)
-                        </div>
-                      </div>
-                    </div>
+                      <Icon className="h-4 w-4" />
+                      <span className="truncate">{category.name}</span>
+                    </button>
                   );
                 })}
               </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Media Strip - condensed */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <Video className="mr-2 h-5 w-5" />
-              Review Media
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-muted-foreground">
-                Tap any thumbnail to preview
-              </p>
-              <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                <span className="flex items-center gap-1">
-                  <Video className="h-4 w-4" /> 3 Videos
-                </span>
-                <span className="flex items-center gap-1">
-                  <Camera className="h-4 w-4" /> 6 Shots
-                </span>
-              </div>
             </div>
-            <div className="mt-3 overflow-x-auto">
-              <div className="flex gap-3">
-                {[1, 2, 3].map((i) => (
-                  <button
-                    key={`video-${i}`}
-                    type="button"
-                    onClick={() => {
-                      setSelectedMedia({
-                        type: "video",
-                        title: `Review Session ${i}`,
-                      });
-                      setIsLightboxOpen(true);
-                    }}
-                    className="group relative w-28 h-20 flex-shrink-0 rounded-md border bg-muted overflow-hidden"
-                  >
-                    <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
-                      <Video className="h-6 w-6" />
-                    </div>
-                    <span className="absolute bottom-1 left-1 text-[10px] bg-black/50 text-white px-1.5 py-0.5 rounded opacity-90 group-hover:opacity-100">
-                      Session {i}
-                    </span>
-                  </button>
-                ))}
-                {[1, 2, 3, 4, 5, 6].map((i) => (
-                  <button
-                    key={`shot-${i}`}
-                    type="button"
-                    onClick={() => {
-                      setSelectedMedia({
-                        type: "image",
-                        title: `Screenshot ${i}`,
-                        src: `https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=1000&q=70`,
-                      });
-                      setIsLightboxOpen(true);
-                    }}
-                    className="group relative w-28 h-20 flex-shrink-0 rounded-md border overflow-hidden"
-                  >
-                    <img
-                      src={`https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=300&q=60`}
-                      alt={`Screenshot ${i}`}
-                      className="w-full h-full object-cover"
-                    />
-                    <span className="absolute bottom-1 left-1 text-[10px] bg-black/50 text-white px-1.5 py-0.5 rounded opacity-90 group-hover:opacity-100">
-                      Shot {i}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+          </nav>
+        </aside>
 
-        {/* Executive Summary Section */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <FileText className="mr-2 h-5 w-5" />
-              Executive Summary
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="prose max-w-none">
-              <h4>Overall Assessment</h4>
-              <p>
-                The MAGNET analysis of {project.name} reveals a website with
-                strong potential but several areas requiring immediate
-                attention. With an overall score of {overallScore}%, the site
-                demonstrates good foundational elements while showing clear
-                opportunities for conversion optimization.
-              </p>
+        {/* Content Area */}
+        <main className="flex-1 overflow-y-auto bg-gray-50">
+          <div className="max-w-5xl mx-auto p-8">
+            {/* Overview Tab */}
+            {activeTab === "overview" && (
+              <ReportOverview
+                project={project}
+                overallScore={overallScore}
+                getStatusColor={getStatusColor}
+                getScoreColor={getScoreColor}
+                costBenefit={mockCostBenefit}
+                topActions={topActions}
+              />
+            )}
 
-              <h4>Key Strengths</h4>
-              <ul>
-                <li>Clean, professional design that builds initial trust</li>
-                <li>Mobile-responsive layout with good user experience</li>
-                <li>Clear navigation structure for easy content discovery</li>
-              </ul>
+            {/* Strategy Tab */}
+            {activeTab === "strategy" && (
+              <ReportStrategy recommendations={mockRecommendations} />
+            )}
 
-              <h4>Critical Areas for Improvement</h4>
-              <ul>
-                <li>Homepage messaging lacks clarity and immediate impact</li>
-                <li>Missing trust signals and social proof elements</li>
-                <li>
-                  Call-to-action buttons need better positioning and design
-                </li>
-              </ul>
+            {/* Media Tab */}
+            {activeTab === "media" && <ReportMedia />}
 
-              <h4>Recommended Next Steps</h4>
-              <p>
-                Focus on implementing high-impact changes first, particularly
-                around messaging clarity and trust building. These improvements
-                could yield a 15-30% increase in conversion rates within 2-4
-                weeks of implementation.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+            {/* MAGNET Category Tabs */}
+            {magnetCategories.map((category) => {
+              if (activeTab !== `category-${category.id}`) return null;
 
-        {/* Recommendations Section */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <Target className="mr-2 h-5 w-5" />
-              Recommendations
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {mockRecommendations.map((rec, index) => (
-                <div key={index} className="p-4 border rounded-lg space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h4 className="font-semibold text-lg">{rec.category}</h4>
-                    <Badge
-                      variant={
-                        rec.priority === "High" ? "destructive" : "secondary"
-                      }
-                    >
-                      {rec.priority} Priority
-                    </Badge>
-                  </div>
-                  <div>
-                    <h5 className="font-medium text-red-600 mb-1">
-                      Issue Identified:
-                    </h5>
-                    <p className="text-sm">{rec.issue}</p>
-                  </div>
-                  <div>
-                    <h5 className="font-medium text-blue-600 mb-1">
-                      Recommendation:
-                    </h5>
-                    <p className="text-sm">{rec.recommendation}</p>
-                  </div>
-                  <div>
-                    <h5 className="font-medium text-green-600 mb-1">
-                      Expected Impact:
-                    </h5>
-                    <p className="text-sm">{rec.impact}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+              const categoryScore =
+                latestScore?.categoryScores[category.id] || 0;
+              const maxCategoryScore = category.questions
+                .filter((q) => q.points && q.points > 0)
+                .reduce((sum, q) => sum + (q.points || 0), 0);
+              const categoryPercentage =
+                maxCategoryScore > 0
+                  ? Math.round((categoryScore / maxCategoryScore) * 100)
+                  : 0;
 
-        {/* Cost/Benefit Analysis Section */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <DollarSign className="mr-2 h-5 w-5" />
-              Cost/Benefit Analysis
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-4">
-                <h4 className="flex items-center text-red-600 font-semibold">
-                  <AlertTriangle className="mr-2 h-5 w-5" />
-                  Cost of Inaction
-                </h4>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm">Monthly Lost Revenue:</span>
-                    <span className="font-semibold text-red-600">
-                      $
-                      {mockCostBenefit.costOfInaction.monthlyLostRevenue.toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm">Yearly Lost Revenue:</span>
-                    <span className="font-semibold text-red-600">
-                      $
-                      {mockCostBenefit.costOfInaction.yearlyLostRevenue.toLocaleString()}
-                    </span>
-                  </div>
-                  <Separator />
-                  <div>
-                    <h5 className="font-medium mb-2">
-                      Impact on Customer Acquisition:
-                    </h5>
-                    <p className="text-sm text-muted-foreground">
-                      {mockCostBenefit.costOfInaction.customerAcquisitionImpact}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <h4 className="flex items-center text-green-600 font-semibold">
-                  <TrendingUp className="mr-2 h-5 w-5" />
-                  Benefits of Action
-                </h4>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm">Estimated ROI:</span>
-                    <span className="font-semibold text-green-600">
-                      {mockCostBenefit.benefitsOfAction.estimatedROI}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm">Time to Implement:</span>
-                    <span className="font-semibold">
-                      {mockCostBenefit.benefitsOfAction.timeToImplement}
-                    </span>
-                  </div>
-                  <Separator />
-                  <div>
-                    <h5 className="font-medium mb-2">Expected Improvement:</h5>
-                    <p className="text-sm text-muted-foreground">
-                      {mockCostBenefit.benefitsOfAction.expectedIncrease}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <Separator />
-
-            <div>
-              <h4 className="flex items-center font-semibold mb-4">
-                <Target className="mr-2 h-5 w-5" />
-                Implementation Roadmap
-              </h4>
-              <div className="space-y-4">
-                {[
-                  {
-                    phase: "Phase 1 (Week 1-2)",
-                    tasks:
-                      "Homepage messaging, trust signals, CTA optimization",
-                  },
-                  {
-                    phase: "Phase 2 (Week 3-4)",
-                    tasks: "Navigation improvements, mobile optimization",
-                  },
-                  {
-                    phase: "Phase 3 (Week 5-6)",
-                    tasks: "Content refinement, A/B testing setup",
-                  },
-                ].map((phase, index) => (
-                  <div key={index} className="flex items-start space-x-3">
-                    <div className="w-8 h-8 bg-primary text-primary-foreground rounded-full flex items-center justify-center text-sm font-medium flex-shrink-0">
-                      {index + 1}
-                    </div>
-                    <div>
-                      <h5 className="font-medium">{phase.phase}</h5>
-                      <p className="text-sm text-muted-foreground">
-                        {phase.tasks}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Media Lightbox */}
-        <Dialog open={isLightboxOpen} onOpenChange={setIsLightboxOpen}>
-          <DialogContent className="max-w-3xl">
-            <DialogHeader>
-              <DialogTitle>{selectedMedia?.title || "Preview"}</DialogTitle>
-            </DialogHeader>
-            {selectedMedia?.type === "image" ? (
-              <div className="w-full">
-                <img
-                  src={
-                    selectedMedia?.src ||
-                    "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=1200&q=70"
-                  }
-                  alt={selectedMedia?.title || "Screenshot"}
-                  className="w-full h-auto rounded-md"
+              return (
+                <MagnetCategoryDetail
+                  key={category.id}
+                  category={category}
+                  score={categoryScore}
+                  maxScore={maxCategoryScore}
+                  percentage={categoryPercentage}
+                  responses={projectResponses}
                 />
-              </div>
-            ) : selectedMedia?.type === "video" ? (
-              <div className="w-full aspect-video bg-black/90 rounded-md flex items-center justify-center text-white">
-                <Video className="h-10 w-10 mr-2" />
-                <span>Video Preview</span>
-              </div>
-            ) : null}
-          </DialogContent>
-        </Dialog>
-      </main>
+              );
+            })}
+          </div>
+        </main>
+      </div>
     </div>
   );
 };

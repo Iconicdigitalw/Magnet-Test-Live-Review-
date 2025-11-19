@@ -135,7 +135,7 @@ const Dashboard = ({ defaultTab = "dashboard" }: DashboardProps) => {
                 className="flex items-center gap-2 hover:opacity-80 transition-opacity"
               >
                 <img
-                  src="/iconic-logo.png"
+                  src="/iconic-logo.webp"
                   alt="Iconic Digital World Logo"
                   className="h-8 w-8"
                 />
@@ -361,7 +361,15 @@ const Dashboard = ({ defaultTab = "dashboard" }: DashboardProps) => {
           )}
 
           {/* Reports Tab */}
-          {activeTab === "reports" && <MagnetReports />}
+          {activeTab === "reports" && (
+            <MagnetReports 
+              projects={projects}
+              onViewReport={projectActions.handleViewReport}
+              onDownload={projectActions.handleDownloadProject}
+              onDelete={handleDeleteProject}
+              onCreateReport={() => setShowNewProjectDialog(true)}
+            />
+          )}
         </main>
       ) : (
         // Workspace Tab (Annotation Interface)

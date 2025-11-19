@@ -933,7 +933,7 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({
               className="flex items-center gap-2 hover:opacity-80 transition-opacity"
             >
               <img
-                src="/iconic-logo.png"
+                src="/iconic-logo.webp"
                 alt="Iconic Digital World Logo"
                 className="h-8 w-8"
               />
