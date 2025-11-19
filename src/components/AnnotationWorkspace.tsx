@@ -194,7 +194,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
   const [isNotesOpen, setIsNotesOpen] = useState<boolean>(false);
   const [noteContent, setNoteContent] = useState<string>("");
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
-  
+
   // Split screen state
   const [isSplitView, setIsSplitView] = useState<boolean>(false);
   const [splitViewUrls, setSplitViewUrls] = useState<{
@@ -207,10 +207,11 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
   }>({ left: false, right: false });
   const iframeLeftRef = useRef<HTMLIFrameElement>(null);
   const iframeRightRef = useRef<HTMLIFrameElement>(null);
-  const [showSplitViewDialog, setShowSplitViewDialog] = useState<boolean>(false);
+  const [showSplitViewDialog, setShowSplitViewDialog] =
+    useState<boolean>(false);
   const [selectedLeftTab, setSelectedLeftTab] = useState<string>("");
   const [selectedRightTab, setSelectedRightTab] = useState<string>("");
-  
+
   const [showRecordingDialog, setShowRecordingDialog] =
     useState<boolean>(false);
   const [recordingOptions, setRecordingOptions] = useState({
@@ -441,12 +442,12 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
     // Create a combined list of all available URLs including the current project URL
     const allAvailableUrls = [
       {
-        id: 'current-project',
+        id: "current-project",
         url: currentUrl,
         title: getDomainFromUrl(currentUrl),
         isFile: false,
       },
-      ...urlTabs
+      ...urlTabs,
     ];
 
     if (allAvailableUrls.length < 2) {
@@ -491,7 +492,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
     setIsSplitView(true);
     setShowSplitViewDialog(false);
     setSplitViewLoadingStates({ left: true, right: true });
-    
+
     toast({
       title: "Split view enabled",
       description: "Comparing two websites side by side.",
@@ -2541,7 +2542,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
                       </Button>
                     </div>
                   </div>
-                  
+
                   <div className="max-h-60 overflow-y-auto">
                     {urlTabs.map((tab) => (
                       <DropdownMenuItem
@@ -2999,7 +3000,6 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
           </TooltipProvider>
         </div>
       </div>
-
       {/* Enhanced Recording Control Strip */}
       {showRecordingTray && (
         <div className="fixed top-12 right-4 z-[100] animate-in slide-in-from-top-2 duration-300 pointer-events-auto">
@@ -3154,7 +3154,6 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
           </div>
         </div>
       )}
-
       {/* Viewport container */}
       <div className="relative flex-1">
         <div
@@ -3229,7 +3228,6 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
                   />
                 </div>
               </div>
-
               {/* Right Panel */}
               <div className="flex-1 flex flex-col gap-2">
                 {/* Right URL Selector */}
@@ -3300,7 +3298,6 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
                   <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
                 </div>
               )}
-
               {/* Full Page Capture Progress Overlay */}
               {isCapturing && (
                 <div className="absolute inset-0 flex items-center justify-center bg-black/60 z-20">
@@ -3341,14 +3338,15 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
                   </div>
                 </div>
               )}
-
               {/* Website iframe, screenshot, or PDF */}
               {screenshotUrl ? (
                 <div
                   className="w-full h-full overflow-auto bg-gray-50"
                   style={{
                     width: isFullscreen ? "100vw" : `${currentDevice.width}px`,
-                    height: isFullscreen ? "100vh" : `${currentDevice.height}px`,
+                    height: isFullscreen
+                      ? "100vh"
+                      : `${currentDevice.height}px`,
                     transform: isFullscreen ? "none" : `scale(${zoomLevel})`,
                     transformOrigin: "top left",
                   }}
@@ -3395,8 +3393,10 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
                         filter: "none", // Ensure no filters are applied
                         transform: "none", // Ensure no transforms are applied
                       }}
-                      loading="eager" // Load immediately for better quality perception
-                      decoding="sync" // Synchronous decoding for immediate display
+                      // Load immediately for better quality perception
+                      loading="eager"
+                      // Synchronous decoding for immediate display
+                      decoding="sync"
                       onLoad={(e) => {
                         // Ensure the image maintains its natural dimensions
                         const img = e.target as HTMLImageElement;
@@ -3426,7 +3426,9 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
                   className="w-full h-full border-0 border-transparent border-none"
                   style={{
                     width: isFullscreen ? "100vw" : `${currentDevice.width}px`,
-                    height: isFullscreen ? "100vh" : `${currentDevice.height}px`,
+                    height: isFullscreen
+                      ? "100vh"
+                      : `${currentDevice.height}px`,
                     transform: isFullscreen ? "none" : `scale(${zoomLevel})`,
                     transformOrigin: "top left",
                   }}
@@ -3436,7 +3438,6 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
                   onError={handleIframeError}
                 />
               )}
-
               {/* Screenshot Options Overlay */}
               {showScreenshotOptions && (
                 <div className="absolute inset-0 flex items-center justify-center bg-black/60 z-30">
@@ -3494,7 +3495,6 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
                   </div>
                 </div>
               )}
-
               {/* Hidden file input */}
               <input
                 ref={fileInputRef}
@@ -3503,7 +3503,6 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
                 onChange={handleLoadScreenshot}
                 className="hidden"
               />
-
               {/* Annotation overlay */}
               <LiveAnnotationOverlay
                 key={`overlay-${magnetActiveTab}`}
@@ -3511,7 +3510,9 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
                 tabId={magnetActiveTab}
                 tabColor={getTabColor(magnetActiveTab)}
                 width={isFullscreen ? window.innerWidth : currentDevice.width}
-                height={isFullscreen ? window.innerHeight : currentDevice.height}
+                height={
+                  isFullscreen ? window.innerHeight : currentDevice.height
+                }
                 scrollTop={scrollPosition.y}
                 scrollLeft={scrollPosition.x}
                 zoomLevel={isFullscreen ? 1.0 : zoomLevel}
@@ -3561,7 +3562,7 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
               {!isMagnetPanelMinimized ? (
                 <>
                   <div className="flex items-center p-4 border-b justify-center h-0.5">
-                    <h2 className="text-lg font-semibold leading-tight">
+                    <h2 className="text-lg leading-tight font-thin">
                       What's your MAGNET?
                     </h2>
                     <Button
@@ -4030,7 +4031,10 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
         </Dialog>
 
         {/* Split View Selection Dialog */}
-        <Dialog open={showSplitViewDialog} onOpenChange={setShowSplitViewDialog}>
+        <Dialog
+          open={showSplitViewDialog}
+          onOpenChange={setShowSplitViewDialog}
+        >
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
@@ -4038,10 +4042,11 @@ const AnnotationWorkspace: React.FC<AnnotationWorkspaceProps> = ({
                 Select URLs to Compare
               </DialogTitle>
               <DialogDescription>
-                Choose two different URLs to display side by side for comparison.
+                Choose two different URLs to display side by side for
+                comparison.
               </DialogDescription>
             </DialogHeader>
-            
+
             <div className="space-y-4 py-4">
               {/* Left Panel Selection */}
               <div className="space-y-2">

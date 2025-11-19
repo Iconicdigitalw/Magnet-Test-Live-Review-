@@ -658,7 +658,7 @@ const MagnetReviewPanelInner: React.FC<MagnetReviewPanelProps> = ({
                               {question.text}
                             </span>
                             {isAnswered && (
-                              <CheckCircle className="h-4 w-4 text-primary flex-shrink-0" />
+                              <CheckCircle className="h-4 w-4 flex-shrink-0 text-emerald-700" />
                             )}
                           </div>
                         </AccordionTrigger>
