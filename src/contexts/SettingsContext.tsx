@@ -104,7 +104,7 @@ const defaultMagnetCategories: MagnetCategory[] = [
     name: "Manna Magnetic Captivation",
     description:
       "In the first 1 to 3 seconds, does your website share a strong, clear message or bold promise that grabs visitors' attention and makes them curious to learn more or act?",
-    color: "bg-red-500",
+    color: "bg-red-500/20",
     questions: [
       {
         id: "m1",
@@ -263,7 +263,7 @@ const defaultMagnetCategories: MagnetCategory[] = [
     name: "Activate Authentic Connection",
     description:
       "Do you use the exact words and phrases your ideal clients use to describe their biggest challenges or desired outcomes?",
-    color: "bg-blue-500",
+    color: "bg-blue-500/20",
     questions: [
       {
         id: "a1",
@@ -473,7 +473,7 @@ const defaultMagnetCategories: MagnetCategory[] = [
     name: "Guide with GOLDEN Persuasion",
     description:
       "Is your website messaging framed as an engaging, persuasive story?",
-    color: "bg-yellow-500",
+    color: "bg-yellow-500/20",
     questions: [
       {
         id: "g1",
@@ -882,7 +882,7 @@ const defaultMagnetCategories: MagnetCategory[] = [
     name: "Nail Niche-Precision Design",
     description:
       "Does your website align with the general look and feel of other sites in your niche BUT without blending in OR feeling out of place?",
-    color: "bg-green-500",
+    color: "bg-green-500/20",
     questions: [
       {
         id: "n1",
@@ -1056,7 +1056,7 @@ const defaultMagnetCategories: MagnetCategory[] = [
     name: "Engineer Elegant Experience",
     description:
       "Does your site load fast (under 3 seconds) and provide a smooth frustration-free experience on phone and other devices?",
-    color: "bg-purple-500",
+    color: "bg-purple-500/20",
     questions: [
       {
         id: "e1",
@@ -1165,7 +1165,7 @@ const defaultMagnetCategories: MagnetCategory[] = [
     name: "Trigger Targeted Dominance",
     description:
       "How often does your site show up in google, social media, and AI search?",
-    color: "bg-orange-500",
+    color: "bg-orange-500/20",
     questions: [
       {
         id: "t1",
